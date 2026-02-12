@@ -1,0 +1,265 @@
+# ============================================
+# Dependencies
+# ============================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnp
+.pnp.js
+
+# ============================================
+# Build Output
+# ============================================
+/dist
+/build
+*.tsbuildinfo
+*.tsbuildinfo.*
+*.d.ts.map
+
+# ============================================
+# Environment Variables
+# ============================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+*.env
+
+# ============================================
+# Logs
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log.*
+
+# ============================================
+# Testing
+# ============================================
+/coverage
+/.nyc_output
+*.lcov
+.nyc_output
+test-results/
+playwright-report/
+playwright/.cache/
+
+# ============================================
+# IDE and Editors
+# ============================================
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# IntelliJ IDEA / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# OS Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+*.cache
+.cache/
+.temp/
+tmp/
+temp/
+
+# ============================================
+# Database
+# ============================================
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# ============================================
+# Firebase / Supabase
+# ============================================
+.firebase/
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+.firebaserc.json
+.firebase/
+supabase/.temp/
+supabase/.branches/
+
+# ============================================
+# TypeScript
+# ============================================
+*.tsbuildinfo
+*.d.ts.map
+
+# ============================================
+# NestJS Specific
+# ============================================
+dist/
+build/
+.nest/
+
+# ============================================
+# Package Managers
+# ============================================
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# npm
+.npm
+.eslintcache
+.stylelintcache
+
+# pnpm
+.pnpm-store/
+.pnpm-debug.log
+
+# ============================================
+# Misc
+# ============================================
+*.pid
+*.seed
+*.pid.lock
+.vercel
+.vercelignore
+.next
+out
+.nuxt
+.cache
+.parcel-cache
+.turbo
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test
+*.pem
+*.key
+*.cert
+*.crt
+
+# ============================================
+# Uploads / User Generated Content
+# ============================================
+uploads/
+public/uploads/
+storage/uploads/
+
+# ============================================
+# Documentation Build
+# ============================================
+docs/_build/
+site/
+
+# ============================================
+# Local Development
+# ============================================
+.local/
+local/
+*.local
+
+# ============================================
+# Secrets and Credentials
+# ============================================
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+
+# ============================================
+# Backup Files
+# ============================================
+*.bak
+*.backup
+*.old
+*.orig
+*.save

@@ -1,0 +1,560 @@
+{
+  "categories": [
+    {
+      "type": "rent",
+      "key": "other_buildings_and_refrigeration",
+      "name": {
+        "hy": "Այլ շինություններ և սառնարաններ",
+        "en": "Other Buildings & Refrigeration",
+        "ru": "Другие сооружения и холодильники"
+      },
+      "subcategories": [
+        {
+          "key": "warehouses_storage_facilities",
+          "name": {
+            "hy": "Պահեստներ",
+            "en": "Warehouses / Storage Facilities",
+            "ru": "Склады"
+          },
+          "items": [
+            {
+              "key": "grain_warehouse",
+              "name": {
+                "hy": "Հացահատիկի պահեստ",
+                "en": "Grain Warehouse",
+                "ru": "Склад зерна"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "vegetable_warehouse",
+              "name": {
+                "hy": "Բանջարեղենի պահեստ",
+                "en": "Vegetable Warehouse",
+                "ru": "Склад овощей"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "fruit_warehouse",
+              "name": {
+                "hy": "Մրգերի պահեստ",
+                "en": "Fruit Warehouse",
+                "ru": "Склад фруктов"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "refrigerated_warehouse",
+              "name": {
+                "hy": "Սառնարանային պահեստ",
+                "en": "Refrigerated Warehouse",
+                "ru": "Холодильный склад"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "seed_warehouse",
+              "name": {
+                "hy": "Սերմերի պահեստ",
+                "en": "Seed Warehouse",
+                "ru": "Склад семян"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "feed_warehouse",
+              "name": {
+                "hy": "Կերի պահեստ",
+                "en": "Feed Warehouse",
+                "ru": "Склад кормов"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "pesticide_warehouse",
+              "name": {
+                "hy": "Թունաքիմիկատների պահեստ",
+                "en": "Pesticide Warehouse",
+                "ru": "Склад химикатов"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        },
+
+        {
+          "key": "livestock_buildings",
+          "name": {
+            "hy": "Անասնապահական շինություններ",
+            "en": "Livestock Buildings",
+            "ru": "Животноводческие сооружения"
+          },
+          "items": [
+            {
+              "key": "cattle_barn",
+              "name": {
+                "hy": "Անասնագոմ",
+                "en": "Cattle Barn",
+                "ru": "Коровник"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "sheep_barn",
+              "name": {
+                "hy": "Ոչխարների գոմ",
+                "en": "Sheep Barn",
+                "ru": "Овчарня"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "goat_barn",
+              "name": {
+                "hy": "Այծերի գոմ",
+                "en": "Goat Barn",
+                "ru": "Козлятник"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "pigsty",
+              "name": {
+                "hy": "Խոզանոց",
+                "en": "Pigsty",
+                "ru": "Свинарник"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "stable_horses",
+              "name": {
+                "hy": "Ձիանոց",
+                "en": "Stable (Horses)",
+                "ru": "Конюшня"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "poultry_house",
+              "name": {
+                "hy": "Թռչնանոց",
+                "en": "Poultry House",
+                "ru": "Птичник"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        },
+
+        {
+          "key": "greenhouse_structures",
+          "name": {
+            "hy": "Ջերմոցային շինություններ",
+            "en": "Greenhouse Structures",
+            "ru": "Тепличные сооружения"
+          },
+          "items": [
+            {
+              "key": "polyethylene_greenhouse",
+              "name": {
+                "hy": "Պոլիէթիլենային ջերմոց",
+                "en": "Polyethylene Greenhouse",
+                "ru": "Пленочная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "glass_greenhouse",
+              "name": {
+                "hy": "Ապակե ջերմոց",
+                "en": "Glass Greenhouse",
+                "ru": "Стеклянная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "seasonal_greenhouse",
+              "name": {
+                "hy": "Սեզոնային ջերմոց",
+                "en": "Seasonal Greenhouse",
+                "ru": "Сезонная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "permanent_greenhouse",
+              "name": {
+                "hy": "Մշտական ջերմոց",
+                "en": "Permanent Greenhouse",
+                "ru": "Постоянная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "seedling_greenhouse",
+              "name": {
+                "hy": "Սածիլների ջերմոց",
+                "en": "Seedling Greenhouse",
+                "ru": "Теплица для рассады"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "tunnel_greenhouse",
+              "name": {
+                "hy": "Թունելային ջերմոց",
+                "en": "Tunnel Greenhouse",
+                "ru": "Туннельная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "heated_greenhouse",
+              "name": {
+                "hy": "Տաքացվող ջերմոց",
+                "en": "Heated Greenhouse",
+                "ru": "Отапливаемая теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "cold_greenhouse",
+              "name": {
+                "hy": "Սառը ջերմոց",
+                "en": "Cold Greenhouse",
+                "ru": "Холодная теплица"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        },
+
+        {
+          "key": "production_buildings",
+          "name": {
+            "hy": "Արտադրական շինություններ",
+            "en": "Production Buildings",
+            "ru": "Производственные здания"
+          },
+          "items": [
+            {
+              "key": "fruit_vegetable_processing_facility",
+              "name": {
+                "hy": "Մրգերի և բանջարեղենի մշակման շինություն",
+                "en": "Fruit & Vegetable Processing Facility",
+                "ru": "Цех переработки фруктов и овощей"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "drying_facility",
+              "name": {
+                "hy": "Չորանոց",
+                "en": "Drying Facility",
+                "ru": "Сушильня"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "canning_workshop",
+              "name": {
+                "hy": "Պահածոների արտադրամաս",
+                "en": "Canning Workshop",
+                "ru": "Консервный цех"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "dairy_processing_facility",
+              "name": {
+                "hy": "Կաթի վերամշակման շինություն",
+                "en": "Dairy Processing Facility",
+                "ru": "Цех переработки молока"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "meat_processing_facility",
+              "name": {
+                "hy": "Մսի մշակման շինություն",
+                "en": "Meat Processing Facility",
+                "ru": "Цех переработки мяса"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "honey_processing_facility",
+              "name": {
+                "hy": "Մեղրի մշակման շինություն",
+                "en": "Honey Processing Facility",
+                "ru": "Цех переработки мёда"
+              },
+              "measurements": [
+                { "hy": "ամ", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "dried_fruit_facility",
+              "name": {
+                "hy": "Չրանոց",
+                "en": "Dried Fruit Facility",
+                "ru": "Цех по производству сухофруктов"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        },
+
+        {
+          "key": "technical_buildings",
+          "name": {
+            "hy": "Տեխնիկական շինություններ",
+            "en": "Technical Buildings",
+            "ru": "Технические сооружения"
+          },
+          "items": [
+            {
+              "key": "machinery_garage",
+              "name": {
+                "hy": "Տեխնիկայի գարաժ",
+                "en": "Machinery Garage",
+                "ru": "Гараж для техники"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "open_machinery_platform",
+              "name": {
+                "hy": "Տեխնիկայի բաց հարթակ",
+                "en": "Open Machinery Platform",
+                "ru": "Открытая площадка для техники"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "equipment_storage",
+              "name": {
+                "hy": "Սարքավորումների պահեստ",
+                "en": "Equipment Storage",
+                "ru": "Склад оборудования"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "repair_workshop",
+              "name": {
+                "hy": "Վերանորոգման արհեստանոց",
+                "en": "Repair Workshop",
+                "ru": "Ремонтная мастерская"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        },
+
+        {
+          "key": "refrigerators_storage",
+          "name": {
+            "hy": "Սառնարաններ և պահեստներ",
+            "en": "Refrigerators & Storage",
+            "ru": "Холодильники и склады"
+          },
+          "items": [
+            {
+              "key": "fruit_cold_storage",
+              "name": {
+                "hy": "Մրգերի սառնարան",
+                "en": "Fruit Cold Storage",
+                "ru": "Холодильник для фруктов"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "vegetable_cold_storage",
+              "name": {
+                "hy": "Բանջարեղենի սառնարան",
+                "en": "Vegetable Cold Storage",
+                "ru": "Холодильник для овощей"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "meat_cold_storage",
+              "name": {
+                "hy": "Մսի սառնարան",
+                "en": "Meat Cold Storage",
+                "ru": "Холодильник для мяса"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "dairy_cold_storage",
+              "name": {
+                "hy": "Կաթնամթերքի սառնարան",
+                "en": "Dairy Cold Storage",
+                "ru": "Холодильник для молочных продуктов"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "fish_cold_storage",
+              "name": {
+                "hy": "Ձկան սառնարան",
+                "en": "Fish Cold Storage",
+                "ru": "Холодильник для рыбы"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "mobile_storage_refrigeration",
+              "name": {
+                "hy": "Մոբիլ պահեստներ և սառնարաններ",
+                "en": "Mobile Storage & Refrigeration",
+                "ru": "Мобильные склады и холодильники"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "container_refrigerator",
+              "name": {
+                "hy": "Կոնտեյներային սառնարան",
+                "en": "Container Refrigerator",
+                "ru": "Контейнерный холодильник"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            },
+            {
+              "key": "container_warehouse",
+              "name": {
+                "hy": "Կոնտեյներային պահեստ",
+                "en": "Container Warehouse",
+                "ru": "Контейнерный склад"
+              },
+              "measurements": [
+                { "hy": "ам", "en": "mo", "ru": "мс" },
+                { "hy": "տ", "en": "yr", "ru": "г" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
