@@ -3,18 +3,19 @@ import {
   BadRequestException,
   UnauthorizedException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { DeviceToken } from '../entities/device-token.entity';
 import { User, UserType, AccountStatus } from '../entities/user.entity';
 import { Region } from '../entities/region.entity';
 import { Village } from '../entities/village.entity';
 import { OtpChannel } from '../entities/otp-code.entity';
 import { OtpService } from '../common/services/otp.service';
 import { AuthJwtService } from './jwt.service';
+import { StorageService } from '../storage/storage.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -22,13 +23,12 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
   private readonly inactiveMonthsForAdminReview: number;
 
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    @InjectRepository(DeviceToken)
-    private deviceTokenRepository: Repository<DeviceToken>,
     @InjectRepository(Region)
     private regionRepository: Repository<Region>,
     @InjectRepository(Village)
@@ -36,6 +36,7 @@ export class AuthService {
     private otpService: OtpService,
     private jwtService: AuthJwtService,
     private configService: ConfigService,
+    private storageService: StorageService,
   ) {
     this.inactiveMonthsForAdminReview = parseInt(
       this.configService.get('INACTIVE_MONTHS_FOR_ADMIN_REVIEW') || '12',
@@ -431,7 +432,24 @@ export class AuthService {
       user.emails = updateUserDto.emails;
     }
     if (updateUserDto.profile_picture !== undefined) {
-      user.profile_picture = updateUserDto.profile_picture || null;
+      // Delete old profile picture from storage if it's being replaced
+      const oldProfilePicture = user.profile_picture;
+      const newProfilePicture = updateUserDto.profile_picture || null;
+      
+      if (oldProfilePicture && oldProfilePicture !== newProfilePicture) {
+        // Only delete if it's a storage path (not external URL)
+        if (!oldProfilePicture.startsWith('http://') && !oldProfilePicture.startsWith('https://')) {
+          try {
+            await this.storageService.deleteImage(oldProfilePicture);
+            this.logger.log(`Deleted old profile picture from storage: ${oldProfilePicture}`);
+          } catch (error) {
+            this.logger.warn(`Failed to delete old profile picture from storage: ${error.message}`);
+            // Don't throw - continue with update even if deletion fails
+          }
+        }
+      }
+      
+      user.profile_picture = newProfilePicture;
     }
     if (validRegionId !== null) {
       user.region_id = validRegionId;
@@ -526,62 +544,7 @@ export class AuthService {
       user.last_active_at = new Date();
       await this.userRepository.save(user);
 
-      // Save FCM token and device info if provided
-      if (loginDto.fcm_token) {
-        try {
-          // Check if device token already exists for this user and FCM token
-          let deviceToken = await this.deviceTokenRepository.findOne({
-            where: {
-              user_id: user.id,
-              fcm_token: loginDto.fcm_token,
-            },
-          });
-
-          if (deviceToken) {
-            // Update existing token
-            deviceToken.device_id = loginDto.device_id || deviceToken.device_id;
-            deviceToken.device_type = loginDto.device_type || deviceToken.device_type;
-            deviceToken.device_model = loginDto.device_model || deviceToken.device_model;
-            deviceToken.os_version = loginDto.os_version || deviceToken.os_version;
-            deviceToken.app_version = loginDto.app_version || deviceToken.app_version;
-            deviceToken.is_active = true;
-            await this.deviceTokenRepository.save(deviceToken);
-          } else {
-            // Create new device token
-            deviceToken = this.deviceTokenRepository.create({
-              user_id: user.id,
-              fcm_token: loginDto.fcm_token,
-              device_id: loginDto.device_id || null,
-              device_type: loginDto.device_type || null,
-              device_model: loginDto.device_model || null,
-              os_version: loginDto.os_version || null,
-              app_version: loginDto.app_version || null,
-              is_active: true,
-            });
-            await this.deviceTokenRepository.save(deviceToken);
-          }
-
-          // Deactivate old tokens for the same device_id (if provided)
-          if (loginDto.device_id) {
-            const oldTokens = await this.deviceTokenRepository.find({
-              where: {
-                user_id: user.id,
-                device_id: loginDto.device_id,
-              },
-            });
-            
-            for (const oldToken of oldTokens) {
-              if (oldToken.id !== deviceToken.id) {
-                oldToken.is_active = false;
-                await this.deviceTokenRepository.save(oldToken);
-              }
-            }
-          }
-        } catch (error) {
-          // Log error but don't fail login if FCM token saving fails
-          console.error('Failed to save FCM token:', error);
-        }
-      }
+      // Device token registration is now handled separately via /device-tokens endpoint
 
       // Try to load relations for response (optional, won't fail if relations don't exist)
       let userWithRelations: User | null = null;

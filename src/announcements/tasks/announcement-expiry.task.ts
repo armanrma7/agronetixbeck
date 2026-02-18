@@ -25,4 +25,20 @@ export class AnnouncementExpiryTask {
       this.logger.error('Error in expired rent announcements task:', error);
     }
   }
+
+  /**
+   * Auto-close announcements where expiry_date has passed
+   * Runs daily at midnight
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async handleExpiredAnnouncements() {
+    this.logger.log('Checking for expired announcements (expiry_date)...');
+
+    try {
+      await this.announcementsService.closeExpiredAnnouncements();
+      this.logger.log('Expired announcements check completed');
+    } catch (error) {
+      this.logger.error('Error in expired announcements task:', error);
+    }
+  }
 }

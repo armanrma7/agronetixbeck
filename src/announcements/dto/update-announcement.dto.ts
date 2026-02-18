@@ -84,6 +84,15 @@ export class UpdateAnnouncementDto {
   @IsUUID('4', { each: true, message: 'Each village must be a valid UUID.' })
   villages?: string[];
 
+  @ApiProperty({ 
+    required: false, 
+    description: 'Expiry date when announcement should be automatically closed (format: YYYY-MM-DD)',
+    example: '2026-12-31' 
+  })
+  @IsOptional()
+  @IsDateString({}, { message: 'expiry_date must be a valid date (YYYY-MM-DD).' })
+  expiry_date?: string;
+
   // Status should not be updatable via this endpoint
   // Status changes should use dedicated endpoints (publish, block, close, cancel)
   // But we validate it here to provide a clear error message if someone tries

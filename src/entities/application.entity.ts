@@ -8,6 +8,7 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  Unique,
 } from 'typeorm';
 import { User } from './user.entity';
 import { Announcement } from './announcement.entity';
@@ -21,6 +22,7 @@ export enum ApplicationStatus {
 }
 
 @Entity('applications')
+@Unique('idx_applications_unique_per_user', ['announcement_id', 'applicant_id'])
 export class Application {
   @PrimaryGeneratedColumn('uuid')
   id: string;

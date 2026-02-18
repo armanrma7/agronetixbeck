@@ -26,13 +26,33 @@ export class FcmService {
         return;
       }
 
-      const serviceAccountJson = JSON.parse(serviceAccount);
+      let serviceAccountJson: admin.ServiceAccount;
+
+      // Check if it's a file path (starts with ./ or / or contains .json)
+      if (serviceAccount.startsWith('./') || serviceAccount.startsWith('/') || serviceAccount.endsWith('.json')) {
+        // It's a file path - read the file
+        const fs = require('fs');
+        const path = require('path');
+        const filePath = path.resolve(process.cwd(), serviceAccount);
+        
+        if (!fs.existsSync(filePath)) {
+          this.logger.error(`Firebase service account file not found: ${filePath}`);
+          return;
+        }
+
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        serviceAccountJson = JSON.parse(fileContent);
+        this.logger.log(`Firebase service account loaded from file: ${filePath}`);
+      } else {
+        // It's a JSON string - parse it directly
+        serviceAccountJson = JSON.parse(serviceAccount);
+        this.logger.log('Firebase service account loaded from environment variable');
+      }
 
       if (!admin.apps.length) {
         this.firebaseApp = admin.initializeApp({
           credential: admin.credential.cert(serviceAccountJson),
         });
-        this.logger.log('Firebase Admin initialized successfully');
       } else {
         this.firebaseApp = admin.apps[0];
       }
@@ -90,14 +110,15 @@ export class FcmService {
   }
 
   /**
-   * Send notification to multiple devices
+   * Send notification to multiple devices.
+   * Returns invalidTokens: FCM tokens that are invalid/expired (caller should deactivate them).
    */
   async sendToDevices(
     tokens: string[],
     payload: NotificationPayload
-  ): Promise<{ successCount: number; failureCount: number }> {
+  ): Promise<{ successCount: number; failureCount: number; invalidTokens: string[]; failureReason?: string }> {
     if (!this.firebaseApp || tokens.length === 0) {
-      return { successCount: 0, failureCount: 0 };
+      return { successCount: 0, failureCount: 0, invalidTokens: [] };
     }
 
     try {
@@ -121,7 +142,29 @@ export class FcmService {
       };
 
       const response = await admin.messaging().sendEachForMulticast(message);
-      
+      const invalidTokens: string[] = [];
+      let failureReason: string | undefined;
+
+      if (response.responses) {
+        response.responses.forEach((resp, idx) => {
+          const token = tokens[idx];
+          if (!resp.success && resp.error) {
+            const code = (resp.error as any).code || '';
+            const msg = (resp.error as any).message || resp.error.toString();
+            if (!failureReason) failureReason = code;
+            this.logger.warn(
+              `FCM send failed for device: ${code} - ${msg} (token: ${token?.substring(0, 20)}...)`
+            );
+            if (
+              code === 'messaging/invalid-registration-token' ||
+              code === 'messaging/registration-token-not-registered'
+            ) {
+              invalidTokens.push(token);
+            }
+          }
+        });
+      }
+
       this.logger.log(
         `Notifications sent: ${response.successCount} successful, ${response.failureCount} failed`
       );
@@ -129,10 +172,12 @@ export class FcmService {
       return {
         successCount: response.successCount,
         failureCount: response.failureCount,
+        invalidTokens,
+        failureReason,
       };
     } catch (error) {
       this.logger.error('Failed to send multicast notification:', error);
-      return { successCount: 0, failureCount: tokens.length };
+      return { successCount: 0, failureCount: tokens.length, invalidTokens: [] };
     }
   }
 

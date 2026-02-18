@@ -9,6 +9,8 @@ import { CatalogModule } from './catalog/catalog.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { DeviceTokensModule } from './device-tokens/device-tokens.module';
 import { User } from './entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
 import { Region } from './entities/region.entity';
@@ -20,6 +22,8 @@ import { GoodsCategory } from './entities/goods-category.entity';
 import { GoodsSubcategory } from './entities/goods-subcategory.entity';
 import { GoodsItem } from './entities/goods-item.entity';
 import { AnnouncementView } from './entities/announcement-view.entity';
+import { AnnouncementFavorite } from './entities/announcement-favorite.entity';
+import { Notification } from './entities/notification.entity';
 
 @Module({
   imports: [
@@ -52,6 +56,8 @@ import { AnnouncementView } from './entities/announcement-view.entity';
             GoodsSubcategory,
             GoodsItem,
             AnnouncementView,
+            AnnouncementFavorite,
+            Notification,
           ],
           synchronize: false, // Disabled: Use migrations instead (synchronize conflicts with triggers)
           ssl: {
@@ -65,8 +71,10 @@ import { AnnouncementView } from './entities/announcement-view.entity';
     RegionsModule,
     CatalogModule,
     NotificationsModule,
+    DeviceTokensModule,
     AnnouncementsModule,
     ApplicationsModule,
+    FavoritesModule,
     AuthModule,
     AdminModule,
   ],

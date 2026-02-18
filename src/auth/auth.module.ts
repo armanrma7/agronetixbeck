@@ -8,15 +8,16 @@ import { AuthService } from './auth.service';
 import { AuthJwtService } from './jwt.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../entities/user.entity';
-import { DeviceToken } from '../entities/device-token.entity';
 import { Region } from '../entities/region.entity';
 import { Village } from '../entities/village.entity';
 import { CommonModule } from '../common/common.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, DeviceToken, Region, Village]),
+    TypeOrmModule.forFeature([User, Region, Village]),
     CommonModule,
+    StorageModule,
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

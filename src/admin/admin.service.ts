@@ -4,12 +4,15 @@ import { Repository } from 'typeorm';
 import { User, UserType, AccountStatus } from '../entities/user.entity';
 import { UnlockUserDto } from './dto/unlock-user.dto';
 import { VerifyCompanyDto } from './dto/verify-company.dto';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationType } from '../entities/notification.entity';
 
 @Injectable()
 export class AdminService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -82,6 +85,25 @@ export class AdminService {
     // In production, you would log this action for audit purposes
     console.log(`Admin action: Company ${phone} ${verified ? 'verified' : 'rejected'}, status: ${user.account_status}. Reason: ${reason || 'N/A'}`);
 
+    // Send notification to user about account status change
+    try {
+      const { title, body } = this.getAccountStatusNotificationContent(user.account_status);
+      await this.notificationService.create({
+        user_id: user.id,
+        type: NotificationType.ACCOUNT_STATUS_CHANGED,
+        title,
+        body,
+        data: {
+          account_status: user.account_status,
+          reason: reason || '',
+        },
+        sendPush: true,
+      });
+    } catch (error) {
+      console.error('Failed to send account status notification:', error);
+      // Don't fail the admin action if notification fails
+    }
+
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
 
@@ -89,6 +111,36 @@ export class AdminService {
       message: `Company ${verified ? 'verified' : 'rejected'} successfully`,
       user: userWithoutPassword,
     };
+  }
+
+  /**
+   * Get notification title and body for account status change
+   */
+  private getAccountStatusNotificationContent(
+    status: AccountStatus,
+  ): { title: string; body: string } {
+    switch (status) {
+      case AccountStatus.ACTIVE:
+        return {
+          title: 'Account activated',
+          body: 'Your company account has been verified and activated. You can now use all features.',
+        };
+      case AccountStatus.BLOCKED:
+        return {
+          title: 'Account blocked',
+          body: 'Your company account has been blocked. Please contact support for more information.',
+        };
+      case AccountStatus.PENDING:
+        return {
+          title: 'Account under review',
+          body: 'Your company account is under review. You will be notified when the review is complete.',
+        };
+      default:
+        return {
+          title: 'Account status updated',
+          body: `Your account status has been updated to: ${status}.`,
+        };
+    }
   }
 
   /**

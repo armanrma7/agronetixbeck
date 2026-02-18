@@ -9,6 +9,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service';
@@ -40,41 +41,171 @@ export class ApplicationsController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get applications (filtered by announcementId if provided)' })
+  @ApiOperation({ summary: 'Get applications (filtered by announcementId if provided) with pagination' })
   @ApiQuery({
     name: 'announcementId',
     required: false,
     description: 'Filter applications by announcement ID (announcer only)',
     type: String,
   })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of applications',
+    description: 'Paginated list of applications',
+    schema: {
+      type: 'object',
+      properties: {
+        applications: {
+          type: 'array',
+          items: { type: 'object' },
+        },
+        total: { type: 'number', description: 'Total number of applications matching filters' },
+        page: { type: 'number', description: 'Current page number' },
+        limit: { type: 'number', description: 'Items per page' },
+      },
+    },
   })
   @ApiResponse({ status: 403, description: 'Not authorized' })
   async findAll(
     @Query('announcementId') announcementId?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
     @Request() req?,
   ) {
+    // Validate pagination parameters
+    const pageNum = page ? Number(page) : undefined;
+    const limitNum = limit ? Number(limit) : undefined;
+    
+    if (pageNum !== undefined && pageNum < 1) {
+      throw new BadRequestException('Page must be >= 1');
+    }
+    
+    if (limitNum !== undefined && (limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('Limit must be between 1 and 100');
+    }
+
     if (announcementId) {
-      // If announcementId is provided, return applications for that announcement (announcer only)
-      return this.applicationsService.findByAnnouncement(announcementId, req.user.id);
+      return this.applicationsService.findByAnnouncement(
+        announcementId,
+        req.user.id,
+        req.user.user_type,
+        pageNum,
+        limitNum,
+      );
     }
     // Otherwise return all applications (admin only or user's own)
     // For now, return user's own applications
-    return this.applicationsService.findMyApplications(req.user.id);
+    return this.applicationsService.findMyApplications(req.user.id, pageNum, limitNum);
+  }
+
+  @Get('announcement/:announcementId')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get applications for an announcement (pending & approved only)',
+    description: 'Only the announcement owner or an admin can call this. Returns only PENDING and APPROVED applications.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Default 20, max 100' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of pending and approved applications',
+    schema: {
+      type: 'object',
+      properties: {
+        applications: { type: 'array', items: { type: 'object' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Not the announcement owner or admin' })
+  @ApiResponse({ status: 404, description: 'Announcement not found' })
+  async getByAnnouncement(
+    @Param('announcementId') announcementId: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Request() req?,
+  ) {
+    const pageNum = page ? Number(page) : undefined;
+    const limitNum = limit ? Number(limit) : undefined;
+    if (pageNum !== undefined && pageNum < 1) {
+      throw new BadRequestException('Page must be >= 1');
+    }
+    if (limitNum !== undefined && (limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('Limit must be between 1 and 100');
+    }
+    return this.applicationsService.findByAnnouncement(
+      announcementId,
+      req.user.id,
+      req.user.user_type,
+      pageNum,
+      limitNum,
+    );
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user\'s applications' })
+  @ApiOperation({ summary: 'Get current user\'s applications with pagination' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Page number (default: 1)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    type: Number,
+    description: 'Items per page (default: 20, max: 100)',
+  })
   @ApiResponse({
     status: 200,
-    description: 'List of user\'s applications',
+    description: 'Paginated list of user\'s applications',
+    schema: {
+      type: 'object',
+      properties: {
+        applications: {
+          type: 'array',
+          items: { type: 'object' },
+        },
+        total: { type: 'number', description: 'Total number of applications' },
+        page: { type: 'number', description: 'Current page number' },
+        limit: { type: 'number', description: 'Items per page' },
+      },
+    },
   })
-  async findMyApplications(@Request() req) {
-    return this.applicationsService.findMyApplications(req.user.id);
+  async findMyApplications(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    // Validate pagination parameters
+    const pageNum = page ? Number(page) : undefined;
+    const limitNum = limit ? Number(limit) : undefined;
+    
+    if (pageNum !== undefined && pageNum < 1) {
+      throw new BadRequestException('Page must be >= 1');
+    }
+    
+    if (limitNum !== undefined && (limitNum < 1 || limitNum > 100)) {
+      throw new BadRequestException('Limit must be between 1 and 100');
+    }
+
+    return this.applicationsService.findMyApplications(req.user.id, pageNum, limitNum);
   }
 
   @Get(':id')

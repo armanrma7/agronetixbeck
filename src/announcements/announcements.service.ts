@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { 
@@ -51,6 +52,7 @@ export class AnnouncementsService {
     private fcmService: FcmService,
     private deviceTokenService: DeviceTokenService,
     private storageService: StorageService,
+    private configService: ConfigService,
   ) {}
 
   /**
@@ -296,17 +298,23 @@ export class AnnouncementsService {
   }
 
   /**
-   * Determine initial status based on description and images
+   * Determine initial status: only goods can be auto-published (when no description/images).
+   * Rent and service always start as PENDING (require admin verification).
    */
   private determineInitialStatus(
+    category: AnnouncementCategory,
     description?: string,
     images?: string[]
   ): AnnouncementStatus {
-    // If description OR images exist, needs verification
+    // Rent and service always pending until admin publishes
+    if (category === AnnouncementCategory.RENT || category === AnnouncementCategory.SERVICE) {
+      return AnnouncementStatus.PENDING;
+    }
+    // Goods: if description or images exist, needs verification
     if (description || (images && images.length > 0)) {
       return AnnouncementStatus.PENDING;
     }
-    // Auto-publish if no description or images
+    // Goods only: auto-publish when no description or images
     return AnnouncementStatus.PUBLISHED;
   }
 
@@ -401,8 +409,18 @@ export class AnnouncementsService {
       throw new BadRequestException(`Item with ID ${createDto.item_id} not found`);
     }
 
-    // Determine initial status
-    const status = this.determineInitialStatus(createDto.description, createDto.images);
+    // Determine initial status (only goods can be auto-published; rent/service always pending)
+    const status = this.determineInitialStatus(createDto.category, createDto.description, createDto.images);
+
+    // Calculate expiry_date if admin has configured default expiry days
+    let expiryDate: Date | null = null;
+    const defaultExpiryDays = this.configService.get<number>('ANNOUNCEMENT_DEFAULT_EXPIRY_DAYS');
+    if (defaultExpiryDays && defaultExpiryDays > 0) {
+      const expiry = new Date();
+      expiry.setDate(expiry.getDate() + defaultExpiryDays);
+      expiry.setHours(0, 0, 0, 0);
+      expiryDate = expiry;
+    }
 
     // Create announcement
     // Ensure NULL values are explicitly set for non-applicable fields
@@ -432,6 +450,7 @@ export class AnnouncementsService {
       regions: createDto.regions || [],
       villages: createDto.villages || [],
       available_quantity: createDto.category === AnnouncementCategory.GOODS ? (createDto.count || 0) : 0,
+      expiry_date: expiryDate,
     });
 
     const savedAnnouncement = await this.announcementRepository.save(announcement);
@@ -462,7 +481,7 @@ export class AnnouncementsService {
     page?: number;
     limit?: number;
     excludeOwnerId?: string; // Exclude announcements owned by this user
-  }): Promise<{ announcements: Announcement[]; total: number }> {
+  }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     // Validate status enum if provided
     if (params.status) {
       const validStatuses = Object.values(AnnouncementStatus);
@@ -577,7 +596,64 @@ export class AnnouncementsService {
     // Resolve applications count and data for each announcement
     const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
 
-    return { announcements: withApplications, total };
+    return {
+      announcements: withApplications,
+      total,
+      page,
+      limit,
+    };
+  }
+
+  /**
+   * Search published announcements by text (description + item/group names).
+   * Fast: single query, minimal selects, no applications/regions. Use for search-as-you-type.
+   */
+  async search(params: {
+    q: string;
+    page?: number;
+    limit?: number;
+    excludeOwnerId?: string;
+  }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
+    const trimmed = (params.q || '').trim();
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.min(50, Math.max(1, params.limit || 20));
+    const skip = (page - 1) * limit;
+
+    if (!trimmed) {
+      return { announcements: [], total: 0, page, limit };
+    }
+
+    const pattern = `%${trimmed.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`;
+
+    const qb = this.announcementRepository
+      .createQueryBuilder('announcement')
+      .leftJoin('announcement.owner', 'owner')
+      .leftJoin('announcement.group', 'group')
+      .leftJoin('announcement.item', 'item')
+      .addSelect('announcement.owner_id')
+      .addSelect(['owner.id', 'owner.full_name'])
+      .addSelect(['group.id', 'group.name_am', 'group.name_en', 'group.name_ru'])
+      .addSelect(['item.id', 'item.name_am', 'item.name_en', 'item.name_ru'])
+      .where('announcement.status = :status', { status: AnnouncementStatus.PUBLISHED })
+      .andWhere(
+        '(announcement.description ILIKE :pattern ESCAPE \'\\\\\' OR item.name_en ILIKE :pattern ESCAPE \'\\\\\' OR item.name_am ILIKE :pattern ESCAPE \'\\\\\' OR item.name_ru ILIKE :pattern ESCAPE \'\\\\\' OR group.name_en ILIKE :pattern ESCAPE \'\\\\\' OR group.name_am ILIKE :pattern ESCAPE \'\\\\\' OR group.name_ru ILIKE :pattern ESCAPE \'\\\\\')',
+        { pattern },
+      );
+
+    if (params.excludeOwnerId) {
+      qb.andWhere('announcement.owner_id != :excludeOwnerId', {
+        excludeOwnerId: params.excludeOwnerId,
+      });
+    }
+
+    const [announcements, total] = await qb
+      .orderBy('announcement.created_at', 'DESC')
+      .skip(skip)
+      .take(limit)
+      .getManyAndCount();
+
+    const enriched = await this.enrichAnnouncementsWithSignedUrls(announcements);
+    return { announcements: enriched, total, page, limit };
   }
 
   /**
@@ -587,16 +663,25 @@ export class AnnouncementsService {
     const announcement = await this.announcementRepository
       .createQueryBuilder('announcement')
       .leftJoin('announcement.owner', 'owner')
+      .leftJoin('owner.region', 'ownerRegion')
+      .leftJoin('owner.village', 'ownerVillage')
       .leftJoin('announcement.group', 'group')
       .leftJoin('announcement.item', 'item')
       .leftJoin('announcement.closedByUser', 'closedByUser')
       // Explicitly select owner_id to ensure it's returned
       .addSelect('announcement.owner_id')
-      // Select only safe fields from owner (exclude sensitive data)
+      // Select only safe fields from owner (exclude sensitive data) + region/village ids + phone
       .addSelect([
         'owner.id',
         'owner.full_name',
+        'owner.phone',
+        'owner.region_id',
+        'owner.village_id',
       ])
+      // Owner's region (id + names)
+      .addSelect(['ownerRegion.id', 'ownerRegion.name_am', 'ownerRegion.name_en', 'ownerRegion.name_ru'])
+      // Owner's village (id + names)
+      .addSelect(['ownerVillage.id', 'ownerVillage.name_am', 'ownerVillage.name_en', 'ownerVillage.name_ru'])
       // Select only id and name fields from group
       .addSelect([
         'group.id',
@@ -633,7 +718,8 @@ export class AnnouncementsService {
   }
 
   /**
-   * Get user's own announcements with filters
+   * Get user's own announcements with filters and pagination
+   * Only returns announcements owned by the specified user (security enforced)
    */
   async findUserAnnouncements(
     userId: string,
@@ -643,14 +729,16 @@ export class AnnouncementsService {
       villages?: string[];
       created_from?: string;
       created_to?: string;
+      page?: number;
+      limit?: number;
     }
-  ): Promise<Announcement[]> {
+  ): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     const queryBuilder = this.announcementRepository
       .createQueryBuilder('announcement')
       .leftJoin('announcement.owner', 'owner')
       .leftJoin('announcement.group', 'group')
       .leftJoin('announcement.item', 'item')
-      // Explicitly select owner_id to ensure it's returned
+      // Explicitly select owner_id to ensure it's returned and verify ownership
       .addSelect('announcement.owner_id')
       // Select only safe fields from owner (exclude sensitive data)
       .addSelect([
@@ -672,6 +760,7 @@ export class AnnouncementsService {
         'item.name_ru',
         'item.measurements',
       ])
+      // CRITICAL: Only return announcements owned by this user
       .where('announcement.owner_id = :userId', { userId });
 
     // Apply status filter
@@ -713,15 +802,31 @@ export class AnnouncementsService {
       });
     }
 
-    queryBuilder.orderBy('announcement.created_at', 'DESC');
+    // Pagination
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
 
-    const announcements = await queryBuilder.getMany();
+    queryBuilder
+      .orderBy('announcement.created_at', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    // Get paginated results and total count in parallel
+    const [announcements, total] = await queryBuilder.getManyAndCount();
 
     // Enrich with signed URLs and resolve regions/villages names
     const enrichedAnnouncements = await this.enrichAnnouncementsWithSignedUrls(announcements);
     
-    // Resolve applications count and data for each announcement
-    return this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
+    // Resolve applications count and data for each announcement (batch query - already optimized)
+    const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
+
+    return {
+      announcements: withApplications,
+      total,
+      page,
+      limit,
+    };
   }
 
   /**
@@ -833,9 +938,19 @@ export class AnnouncementsService {
       throw new ForbiddenException('You can only update your own announcements');
     }
 
-    // Cannot update published announcements (except for admins)
+    // Update rules:
+    // - Published (non-admin): owner can ONLY update expiry_date
+    // - Pending: owner can update ALL fields (including expiry_date)
+    // - Admin: can update anything regardless of status
     if (!isAdmin && announcement.status === AnnouncementStatus.PUBLISHED) {
-      throw new ForbiddenException('Cannot update published announcements');
+      const allowedFields = ['expiry_date'];
+      const updateFields = Object.keys(updateDto).filter(key => updateDto[key] !== undefined);
+      const disallowedFields = updateFields.filter(field => !allowedFields.includes(field));
+      if (disallowedFields.length > 0) {
+        throw new ForbiddenException(
+          `Cannot update published announcements. Only expiry_date can be updated. Attempted to update: ${disallowedFields.join(', ')}`
+        );
+      }
     }
 
     // Validate date range if updating rent dates
@@ -876,6 +991,22 @@ export class AnnouncementsService {
       );
     }
 
+    // Handle image deletion: delete images from storage that are being removed
+    const oldImages = announcement.images || [];
+    const newImages = updateDto.images || [];
+    if (updateDto.images !== undefined) {
+      const imagesToDelete = oldImages.filter(img => !newImages.includes(img));
+      if (imagesToDelete.length > 0) {
+        this.logger.log(`Deleting ${imagesToDelete.length} removed image(s) from storage for announcement ${id}`);
+        try {
+          await this.storageService.deleteImages(imagesToDelete);
+        } catch (error) {
+          this.logger.warn(`Failed to delete some images from storage: ${error.message}`);
+          // Don't throw - continue with update even if deletion fails
+        }
+      }
+    }
+
     // Update fields
     const updatedFields: any = { ...updateDto };
     
@@ -889,6 +1020,10 @@ export class AnnouncementsService {
     
     if (updateDto.date_to !== undefined) {
       updatedFields.date_to = this.parseDate(updateDto.date_to);
+    }
+
+    if (updateDto.expiry_date !== undefined) {
+      updatedFields.expiry_date = this.parseDate(updateDto.expiry_date);
     }
     
     Object.assign(announcement, updatedFields);
@@ -1017,6 +1152,17 @@ export class AnnouncementsService {
     announcement.status = AnnouncementStatus.CANCELED;
     await this.announcementRepository.save(announcement);
 
+    // Delete images from storage when announcement is canceled
+    if (announcement.images && announcement.images.length > 0) {
+      this.logger.log(`Deleting ${announcement.images.length} image(s) from storage for canceled announcement ${id}`);
+      try {
+        await this.storageService.deleteImages(announcement.images);
+      } catch (error) {
+        this.logger.warn(`Failed to delete images from storage: ${error.message}`);
+        // Don't throw - continue even if deletion fails
+      }
+    }
+
     // If it was published, notify applicants (if applications module is integrated)
     if (wasPublished) {
       this.logger.log(`Published announcement ${id} was canceled by owner`);
@@ -1046,6 +1192,17 @@ export class AnnouncementsService {
     // Soft delete
     announcement.status = AnnouncementStatus.CANCELED;
     await this.announcementRepository.save(announcement);
+
+    // Delete images from storage when announcement is deleted
+    if (announcement.images && announcement.images.length > 0) {
+      this.logger.log(`Deleting ${announcement.images.length} image(s) from storage for deleted announcement ${id}`);
+      try {
+        await this.storageService.deleteImages(announcement.images);
+      } catch (error) {
+        this.logger.warn(`Failed to delete images from storage: ${error.message}`);
+        // Don't throw - continue even if deletion fails
+      }
+    }
   }
 
   /**
@@ -1153,6 +1310,39 @@ export class AnnouncementsService {
 
         this.logger.log(`Auto-closed expired rent announcement: ${announcement.id}`);
       }
+    }
+  }
+
+  /**
+   * Auto-close announcements where expiry_date has passed (scheduled task)
+   */
+  async closeExpiredAnnouncements(): Promise<void> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiredAnnouncements = await this.announcementRepository
+      .createQueryBuilder('announcement')
+      .leftJoin('announcement.owner', 'owner')
+      .addSelect(['owner.id', 'owner.full_name'])
+      .where('announcement.expiry_date IS NOT NULL')
+      .andWhere('announcement.expiry_date < :today', { today })
+      .andWhere('announcement.status = :status', { status: AnnouncementStatus.PUBLISHED })
+      .getMany();
+
+    for (const announcement of expiredAnnouncements) {
+      announcement.status = AnnouncementStatus.CLOSED;
+      announcement.closed_by = null; // System closed
+      await this.announcementRepository.save(announcement);
+
+      // Notify owner
+      await this.sendNotificationToUser(
+        announcement.owner_id,
+        'Announcement Expired',
+        `Your announcement "${this.generateSummary(announcement)}" has been automatically closed as it has reached its expiry date.`,
+        { announcementId: announcement.id }
+      );
+
+      this.logger.log(`Auto-closed expired announcement: ${announcement.id} (expiry_date: ${announcement.expiry_date})`);
     }
   }
 }

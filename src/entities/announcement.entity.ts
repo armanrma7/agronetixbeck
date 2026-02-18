@@ -165,6 +165,11 @@ export class Announcement {
   @Column({ type: 'integer', default: 0 })
   views_count: number;
 
+  // Expiry date: when announcement should be automatically closed
+  @Index()
+  @Column({ type: 'date', nullable: true })
+  expiry_date: Date | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
 

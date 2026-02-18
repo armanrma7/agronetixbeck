@@ -160,6 +160,7 @@ firestore-debug.log
 ui-debug.log
 .firebaserc.json
 .firebase/
+firebase-service-account.json
 supabase/.temp/
 supabase/.branches/
 

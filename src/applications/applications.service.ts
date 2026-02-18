@@ -9,12 +9,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Application, ApplicationStatus } from '../entities/application.entity';
 import { Announcement, AnnouncementStatus, AnnouncementCategory } from '../entities/announcement.entity';
-import { User } from '../entities/user.entity';
+import { User, UserType } from '../entities/user.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
-import { FcmService } from '../notifications/fcm.service';
-import { DeviceTokenService } from '../notifications/device-token.service';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationType } from '../entities/notification.entity';
 import { AnnouncementsService } from '../announcements/announcements.service';
 
+/**
+ * Notification rules:
+ * - Someone applied → notify only the ANNOUNCEMENT OWNER (announcement.owner_id).
+ * - Approved / Rejected / Closed → notify only the APPLICANT (application.applicant_id).
+ */
 @Injectable()
 export class ApplicationsService {
   private readonly logger = new Logger(ApplicationsService.name);
@@ -26,8 +31,7 @@ export class ApplicationsService {
     private announcementRepository: Repository<Announcement>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    private fcmService: FcmService,
-    private deviceTokenService: DeviceTokenService,
+    private notificationService: NotificationService,
     private announcementsService: AnnouncementsService,
   ) {}
 
@@ -159,9 +163,10 @@ export class ApplicationsService {
 
     this.validateUserCanApply(applicant);
 
-    // Get announcement with category
+    // Get announcement with category and item (for notification message)
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
+      relations: ['item'],
     });
 
     if (!announcement) {
@@ -178,15 +183,10 @@ export class ApplicationsService {
       throw new BadRequestException('You cannot apply to your own announcement');
     }
 
-    // Check if already applied
+    // One application per user per announcement
     const existingApplication = await this.applicationRepository.findOne({
-      where: {
-        announcement_id: announcementId,
-        applicant_id: applicantId,
-        status: In([ApplicationStatus.PENDING, ApplicationStatus.APPROVED]),
-      },
+      where: { announcement_id: announcementId, applicant_id: applicantId },
     });
-
     if (existingApplication) {
       throw new BadRequestException('You have already applied to this announcement');
     }
@@ -230,33 +230,49 @@ export class ApplicationsService {
 
     const savedApplication = await this.applicationRepository.save(application);
 
-    // Notify announcer
+    // Notify only the announcement owner (no one else)
     try {
       const itemName = announcement.item?.name_en || announcement.item?.name_am || 'announcement';
-      await this.sendNotificationToUser(announcement.owner_id, {
+      await this.notificationService.create({
+        user_id: announcement.owner_id, // only announcement owner
+        type: NotificationType.APPLICATION_CREATED,
         title: 'New Application',
         body: `${applicant.full_name} applied to your announcement "${itemName}"`,
         data: {
-          type: 'application_created',
           announcement_id: announcementId,
           application_id: savedApplication.id,
+          applicant_name: applicant.full_name,
         },
+        sendPush: true,
       });
     } catch (error) {
-      this.logger.error('Failed to send notification:', error);
+      this.logger.error('Failed to send application notification:', error);
     }
 
     return savedApplication;
   }
 
   /**
-   * Get one application by ID
+   * Get one application by ID (includes applicant_id and applicant with id for the user who created the application)
    */
   async findOne(id: string): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id },
       relations: ['applicant', 'announcement'],
-      withDeleted: false, // Exclude soft-deleted records
+      select: {
+        id: true,
+        announcement_id: true,
+        applicant_id: true,
+        count: true,
+        delivery_dates: true,
+        notes: true,
+        status: true,
+        created_at: true,
+        updated_at: true,
+        applicant: { id: true, full_name: true },
+        announcement: { id: true },
+      },
+      withDeleted: false,
     });
 
     if (!application) {
@@ -267,12 +283,16 @@ export class ApplicationsService {
   }
 
   /**
-   * Get applications for an announcement (announcer only)
+   * Get applications for an announcement: only PENDING and APPROVED.
+   * Access: announcement owner or admin only.
    */
   async findByAnnouncement(
     announcementId: string,
-    userId: string
-  ): Promise<Application[]> {
+    userId: string,
+    userType?: string,
+    page?: number,
+    limit?: number
+  ): Promise<{ applications: Application[]; total: number; page: number; limit: number }> {
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
     });
@@ -281,57 +301,63 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId) {
-      throw new ForbiddenException('You can only view applications for your own announcements');
+    const isOwner = announcement.owner_id === userId;
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isOwner && !isAdmin) {
+      throw new ForbiddenException('Only the announcement owner or an admin can view applications');
     }
 
-    return this.applicationRepository.find({
-      where: { announcement_id: announcementId },
+    const pageNum = page || 1;
+    const limitNum = limit || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    const [applications, total] = await this.applicationRepository.findAndCount({
+      where: {
+        announcement_id: announcementId,
+        status: In([ApplicationStatus.PENDING, ApplicationStatus.APPROVED]),
+      },
       relations: ['applicant'],
       order: { created_at: 'DESC' },
-      withDeleted: false, // Exclude soft-deleted records
+      withDeleted: false,
+      skip,
+      take: limitNum,
     });
+
+    return {
+      applications,
+      total,
+      page: pageNum,
+      limit: limitNum,
+    };
   }
 
   /**
-   * Send notification to a user by user ID (gets FCM tokens and sends to all active devices)
+   * Get user's applications with pagination
    */
-  private async sendNotificationToUser(
+  async findMyApplications(
     userId: string,
-    payload: { title: string; body: string; data?: Record<string, string> }
-  ): Promise<void> {
-    try {
-      const fcmTokens = await this.deviceTokenService.getActiveTokensForUser(userId);
-      
-      if (fcmTokens.length > 0) {
-        const result = await this.fcmService.sendToDevices(fcmTokens, payload);
-        this.logger.log(
-          `Sent notifications to ${result.successCount} devices for user ${userId}`
-        );
-        
-        if (result.failureCount > 0) {
-          this.logger.warn(
-            `Failed to send to ${result.failureCount} devices for user ${userId}`
-          );
-        }
-      } else {
-        this.logger.debug(`No active FCM tokens found for user ${userId}`);
-      }
-    } catch (error) {
-      this.logger.error(`Failed to notify user ${userId}:`, error);
-    }
-  }
+    page?: number,
+    limit?: number
+  ): Promise<{ applications: Application[]; total: number; page: number; limit: number }> {
+    const pageNum = page || 1;
+    const limitNum = limit || 20;
+    const skip = (pageNum - 1) * limitNum;
 
-  /**
-   * Get user's applications
-   */
-  async findMyApplications(userId: string): Promise<Application[]> {
-    return this.applicationRepository.find({
+    const [applications, total] = await this.applicationRepository.findAndCount({
       where: { applicant_id: userId },
       relations: ['announcement', 'announcement.owner'],
       order: { created_at: 'DESC' },
-      withDeleted: false, // Exclude soft-deleted records
+      withDeleted: false,
+      skip,
+      take: limitNum,
     });
+
+    return {
+      applications,
+      total,
+      page: pageNum,
+      limit: limitNum,
+    };
   }
 
   /**
@@ -384,21 +410,23 @@ export class ApplicationsService {
 
     // Note: available_quantity is automatically recalculated by database trigger
 
-    // Notify applicant
+    // Notify only the applicant (owner of the application; no one else)
     try {
-      const announcement = await this.announcementRepository.findOne({
+      const announcementWithItem = await this.announcementRepository.findOne({
         where: { id: announcementId },
         relations: ['item'],
       });
-      const itemName = announcement?.item?.name_en || announcement?.item?.name_am || 'announcement';
-      await this.sendNotificationToUser(application.applicant_id, {
+      const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
+      await this.notificationService.create({
+        user_id: application.applicant_id, // only the user who applied
+        type: NotificationType.APPLICATION_APPROVED,
         title: 'Application Approved',
         body: `Your application to "${itemName}" has been approved.`,
         data: {
-          type: 'application_approved',
           announcement_id: announcementId,
           application_id: applicationId,
         },
+        sendPush: true,
       });
     } catch (error) {
       this.logger.error('Failed to send notification:', error);
@@ -441,21 +469,23 @@ export class ApplicationsService {
     application.status = ApplicationStatus.REJECTED;
     await this.applicationRepository.save(application);
 
-    // Notify applicant
+    // Notify only the applicant (owner of the application; no one else)
     try {
       const announcementWithItem = await this.announcementRepository.findOne({
         where: { id: announcementId },
         relations: ['item'],
       });
       const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
-      await this.sendNotificationToUser(application.applicant_id, {
+      await this.notificationService.create({
+        user_id: application.applicant_id, // only the user who applied
+        type: NotificationType.APPLICATION_REJECTED,
         title: 'Application Rejected',
         body: `Your application to "${itemName}" has been rejected.`,
         data: {
-          type: 'application_rejected',
           announcement_id: announcementId,
           application_id: applicationId,
         },
+        sendPush: true,
       });
     } catch (error) {
       this.logger.error('Failed to send notification:', error);
@@ -498,6 +528,30 @@ export class ApplicationsService {
     // Update application status
     application.status = newStatus;
     const updated = await this.applicationRepository.save(application);
+
+    // When closed via updateStatus, notify only the applicant (application owner)
+    if (newStatus === ApplicationStatus.CLOSED) {
+      try {
+        const announcementWithItem = await this.announcementRepository.findOne({
+          where: { id: announcementId },
+          relations: ['item'],
+        });
+        const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
+        await this.notificationService.create({
+          user_id: application.applicant_id, // only the user who applied
+          type: NotificationType.APPLICATION_CLOSED,
+          title: 'Application Closed',
+          body: `Your application to "${itemName}" has been closed.`,
+          data: {
+            announcement_id: announcementId,
+            application_id: applicationId,
+          },
+          sendPush: true,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send application closed notification:', error);
+      }
+    }
 
     this.logger.log(
       `Updated application ${applicationId} status from ${application.status} to ${newStatus}`,

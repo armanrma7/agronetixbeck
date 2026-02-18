@@ -13,8 +13,7 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFiles,
-  ParseFilePipe,
-  FileTypeValidator,
+  ParseUUIDPipe,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
@@ -41,6 +40,43 @@ export class AnnouncementsController {
     private readonly announcementsService: AnnouncementsService,
     private readonly storageService: StorageService,
   ) {}
+
+  private normalizeStorageKey(pathOrUrl: string): string {
+    const raw = (pathOrUrl || '').trim();
+    if (!raw) return raw;
+
+    // If it's already a storage key (no URL), keep it as-is
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+      return raw;
+    }
+
+    // Signed URL format: .../storage/v1/object/sign/<bucket>/<key>?token=...
+    const signMatch = raw.match(/\/object\/sign\/[^/]+\/(.+?)(\?|$)/);
+    if (signMatch?.[1]) {
+      return decodeURIComponent(signMatch[1]);
+    }
+
+    // Public URL format: .../storage/v1/object/public/<bucket>/<key>
+    const publicMatch = raw.match(/\/object\/public\/[^/]+\/(.+?)(\?|$)/);
+    if (publicMatch?.[1]) {
+      return decodeURIComponent(publicMatch[1]);
+    }
+
+    // Fallback: best-effort extract path after "/storage/v1/object/"
+    try {
+      const u = new URL(raw);
+      const parts = u.pathname.split('/').filter(Boolean);
+      const objectIdx = parts.findIndex((p) => p === 'object');
+      if (objectIdx !== -1 && objectIdx + 3 < parts.length) {
+        // object/{sign|public}/{bucket}/{...key}
+        return decodeURIComponent(parts.slice(objectIdx + 3).join('/'));
+      }
+    } catch {
+      // ignore
+    }
+
+    return raw;
+  }
 
   @Post()
   @UseGuards(JwtAuthGuard, CanCreateAnnouncementGuard)
@@ -103,15 +139,6 @@ export class AnnouncementsController {
   @ApiResponse({ status: 403, description: 'User cannot create announcements (not verified, blocked, or wrong user type)' })
   async create(
     @Body() createDto: any, // Will be parsed from multipart/form-data
-    // @UploadedFiles(
-    //   new ParseFilePipe({
-    //     fileIsRequired: false,
-    //     validators: [
-    //       // Validate file type - FileTypeValidator checks mimetype, not filename
-    //       new FileTypeValidator({ fileType: /^image\/(jpeg|jpg|png|webp)$/ }),
-    //     ],
-    //   })
-    // )
     @UploadedFiles() images: { images?: any[] },
     @Request() req,
   ) {
@@ -121,6 +148,30 @@ export class AnnouncementsController {
       throw new BadRequestException(
         `Maximum 3 images allowed. Received ${uploadedImages.length} images.`
       );
+    }
+
+    // Validate image files manually (more flexible than ParseFilePipe)
+    if (uploadedImages.length > 0) {
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+      
+      for (const file of uploadedImages) {
+        const mimetype = file.mimetype?.toLowerCase() || '';
+        const extension = file.originalname?.toLowerCase().substring(file.originalname.lastIndexOf('.')) || '';
+        
+        const isValidMimeType = allowedMimeTypes.includes(mimetype);
+        const isValidExtension = allowedExtensions.includes(extension);
+        
+        if (!isValidMimeType && !isValidExtension) {
+          this.logger.warn(`Invalid image file: ${file.originalname}, mimetype: ${mimetype}, extension: ${extension}`);
+          throw new BadRequestException(
+            `Invalid image file "${file.originalname}". ` +
+            `MIME type: ${mimetype || 'unknown'}, extension: ${extension || 'none'}. ` +
+            `Allowed types: JPEG, JPG, PNG, WebP. ` +
+            `Allowed MIME types: ${allowedMimeTypes.join(', ')}`
+          );
+        }
+      }
     }
 
     // Parse arrays from multipart form data
@@ -146,7 +197,9 @@ export class AnnouncementsController {
     };
 
     // Validate total image count (uploaded + existing URLs)
-    const existingImageCount = Array.isArray(parsedDto.images) ? parsedDto.images.length : 0;
+    const existingImageCount = Array.isArray(parsedDto.images)
+      ? parsedDto.images.map((p) => this.normalizeStorageKey(p)).filter(Boolean).length
+      : 0;
     const totalImageCount = uploadedImages.length + existingImageCount;
     if (totalImageCount > 3) {
       throw new BadRequestException(
@@ -168,7 +221,9 @@ export class AnnouncementsController {
     // Merge uploaded image paths with any existing paths from DTO
     // Note: DTO may contain URLs, but we only store paths in DB
     const allImagePaths = [
-      ...(parsedDto.images || []).filter(path => !path.startsWith('http')), // Filter out URLs if any
+      ...(parsedDto.images || [])
+        .map((p) => this.normalizeStorageKey(p))
+        .filter(Boolean),
       ...imagePaths
     ];
 
@@ -194,6 +249,18 @@ export class AnnouncementsController {
   @ApiResponse({
     status: 200,
     description: 'List of announcements with pagination (excludes current user\'s announcements)',
+    schema: {
+      type: 'object',
+      properties: {
+        announcements: {
+          type: 'array',
+          items: { type: 'object' },
+        },
+        total: { type: 'number', description: 'Total number of announcements matching filters' },
+        page: { type: 'number', description: 'Current page number' },
+        limit: { type: 'number', description: 'Items per page' },
+      },
+    },
   })
   async findAll(
     @Query('category') category?: string,
@@ -241,15 +308,29 @@ export class AnnouncementsController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user\'s announcements with filters' })
+  @ApiOperation({ summary: 'Get current user\'s announcements with filters and pagination' })
   @ApiQuery({ name: 'status', required: false, enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] })
   @ApiQuery({ name: 'region', required: false, description: 'Region UUID (can be multiple: ?region=uuid1&region=uuid2)' })
   @ApiQuery({ name: 'village', required: false, description: 'Village UUID (can be multiple: ?village=uuid1&village=uuid2)' })
   @ApiQuery({ name: 'created_from', required: false, description: 'Filter by created_at from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'created_to', required: false, description: 'Filter by created_at to date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20, max: 100)' })
   @ApiResponse({
     status: 200,
-    description: 'List of user\'s announcements with filters applied',
+    description: 'Paginated list of user\'s announcements with filters applied',
+    schema: {
+      type: 'object',
+      properties: {
+        announcements: {
+          type: 'array',
+          items: { type: 'object' },
+        },
+        total: { type: 'number', description: 'Total number of announcements matching filters' },
+        page: { type: 'number', description: 'Current page number' },
+        limit: { type: 'number', description: 'Items per page' },
+      },
+    },
   })
   async findMyAnnouncements(
     @Request() req,
@@ -258,6 +339,8 @@ export class AnnouncementsController {
     @Query('village') village?: string | string[],
     @Query('created_from') created_from?: string,
     @Query('created_to') created_to?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
   ) {
     // Normalize region and village to arrays
     const regions = Array.isArray(region) ? region : region ? [region] : undefined;
@@ -273,12 +356,59 @@ export class AnnouncementsController {
       }
     }
 
+    // Validate and normalize pagination parameters
+    const pageNum = page ? Number(page) : 1;
+    const limitNum = limit ? Number(limit) : 20;
+    
+    if (pageNum < 1) {
+      throw new BadRequestException('Page must be >= 1');
+    }
+    
+    if (limitNum < 1 || limitNum > 100) {
+      throw new BadRequestException('Limit must be between 1 and 100');
+    }
+
     return this.announcementsService.findUserAnnouncements(req.user.id, {
       status: status as AnnouncementStatus | undefined,
       regions,
       villages,
       created_from,
       created_to,
+      page: pageNum,
+      limit: limitNum,
+    });
+  }
+
+  @Get('search')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiOperation({ summary: 'Search announcements by text (name/description in item, group, description)' })
+  @ApiQuery({ name: 'q', required: true, description: 'Search phrase (matches description and item/group names)' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max 50' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated search results (slim payload, no applications/regions)',
+    schema: {
+      type: 'object',
+      properties: {
+        announcements: { type: 'array', items: { type: 'object' } },
+        total: { type: 'number' },
+        page: { type: 'number' },
+        limit: { type: 'number' },
+      },
+    },
+  })
+  async search(
+    @Query('q') q?: string,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Request() req?: any,
+  ) {
+    return this.announcementsService.search({
+      q: q || '',
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      excludeOwnerId: req?.user?.id,
     });
   }
 
@@ -322,8 +452,9 @@ export class AnnouncementsController {
     status: 200,
     description: 'Announcement details with relations (owner, group, item)',
   })
+  @ApiResponse({ status: 400, description: 'Invalid announcement ID (must be a valid UUID)' })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
-  async findOne(@Param('id') id: string) {
+  async findOne(@Param('id', new ParseUUIDPipe()) id: string) {
     return this.announcementsService.findOne(id);
   }
 
@@ -349,6 +480,7 @@ export class AnnouncementsController {
         date_from: { type: 'string', format: 'date' },
         date_to: { type: 'string', format: 'date' },
         min_area: { type: 'number' },
+        expiry_date: { type: 'string', format: 'date' },
         regions: {
           type: 'array',
           items: { 
@@ -385,17 +517,7 @@ export class AnnouncementsController {
   async update(
     @Param('id') id: string,
     @Body() updateDto: any, // Will be parsed from multipart/form-data
-    @UploadedFiles(
-      new ParseFilePipe({
-        fileIsRequired: false,
-        validators: [
-          // Validate file type - FileTypeValidator checks mimetype, not filename
-          // Mimetypes are like: image/jpeg, image/png, image/webp
-          new FileTypeValidator({ fileType: /^image\/(jpeg|jpg|png|webp)$/ }),
-        ],
-      })
-    )
-    files: { images?: any[] }, // Express.Multer.File[]
+    @UploadedFiles() files: { images?: any[] }, // Express.Multer.File[]
     @Request() req,
   ) {
     // Parse arrays from multipart form data
@@ -428,18 +550,47 @@ export class AnnouncementsController {
       );
     }
 
-    // Get existing announcement to check current image count
-    const existingAnnouncement = await this.announcementsService.findOne(id);
-    const existingImageCount = existingAnnouncement.images?.length || 0;
-    const newImageCount = uploadedImages.length;
-    const existingFromDto = Array.isArray(parsedDto.images) ? parsedDto.images.length : 0;
-    
-    // Calculate total: existing in DB + new uploads + existing from DTO (if replacing)
-    const totalImageCount = Math.max(existingImageCount, existingFromDto) + newImageCount;
-    if (totalImageCount > 3) {
-      throw new BadRequestException(
-        `Maximum 3 images allowed. Current: ${existingImageCount}, new uploads: ${newImageCount}, total would be: ${totalImageCount}.`
-      );
+    // Validate image files manually (more flexible than ParseFilePipe - checks both MIME type and extension)
+    if (uploadedImages.length > 0) {
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+      const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+      
+      for (const file of uploadedImages) {
+        const mimetype = file.mimetype?.toLowerCase() || '';
+        const extension = file.originalname?.toLowerCase().substring(file.originalname.lastIndexOf('.')) || '';
+        
+        const isValidMimeType = allowedMimeTypes.includes(mimetype);
+        const isValidExtension = allowedExtensions.includes(extension);
+        
+        if (!isValidMimeType && !isValidExtension) {
+          this.logger.warn(`Invalid image file: ${file.originalname}, mimetype: ${mimetype}, extension: ${extension}`);
+          throw new BadRequestException(
+            `Invalid image file "${file.originalname}". ` +
+            `MIME type: ${mimetype || 'unknown'}, extension: ${extension || 'none'}. ` +
+            `Allowed types: JPEG, JPG, PNG, WebP. ` +
+            `Allowed MIME types: ${allowedMimeTypes.join(', ')}`
+          );
+        }
+      }
+    }
+
+    // Image update rules:
+    // - If you send `images` (even empty): it becomes the exact final list (missing ones are removed)
+    // - If you upload new files: they are appended to the provided `images` list (or replace all if `images` not provided)
+    // - If you send neither `images` nor uploads: images stay unchanged
+    const hasImagesInDto = Array.isArray(parsedDto.images);
+    const shouldUpdateImages = hasImagesInDto || uploadedImages.length > 0;
+
+    if (shouldUpdateImages) {
+      const keepImages = hasImagesInDto
+        ? (parsedDto.images || []).map((p) => this.normalizeStorageKey(p)).filter(Boolean)
+        : [];
+      const totalImageCount = keepImages.length + uploadedImages.length;
+      if (totalImageCount > 3) {
+        throw new BadRequestException(
+          `Maximum 3 images allowed. You sent ${keepImages.length} existing image(s) and ${uploadedImages.length} new upload(s) (total: ${totalImageCount}).`
+        );
+      }
     }
 
     // Upload new images if provided
@@ -454,16 +605,18 @@ export class AnnouncementsController {
     }
 
     // Merge new image paths with existing paths from DTO
-    // Filter out URLs if any (only store paths)
-    const allImagePaths = [
-      ...(parsedDto.images || []).filter(path => !path.startsWith('http')),
-      ...newImagePaths
-    ];
+    const keepImages = Array.isArray(parsedDto.images)
+      ? (parsedDto.images || []).map((p) => this.normalizeStorageKey(p)).filter(Boolean)
+      : [];
+    const allImagePaths = [...keepImages, ...newImagePaths];
 
     // Update announcement with image paths (not URLs)
     return this.announcementsService.update(
       id,
-      { ...parsedDto, images: allImagePaths.length > 0 ? allImagePaths : undefined },
+      {
+        ...parsedDto,
+        images: (Array.isArray(parsedDto.images) || newImagePaths.length > 0) ? allImagePaths : undefined,
+      },
       req.user.id,
       req.user.user_type
     );

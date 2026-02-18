@@ -207,7 +207,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ 
     summary: 'Login with phone and password',
-    description: 'Optionally include FCM token and device info for push notifications'
+    description: 'Use /device-tokens endpoint to register device for push notifications'
   })
   @ApiResponse({
     status: 200,
