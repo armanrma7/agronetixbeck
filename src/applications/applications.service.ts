@@ -11,6 +11,7 @@ import { Application, ApplicationStatus } from '../entities/application.entity';
 import { Announcement, AnnouncementStatus, AnnouncementCategory } from '../entities/announcement.entity';
 import { User, UserType } from '../entities/user.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { UpdateApplicationDto } from './dto/update-application.dto';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationType } from '../entities/notification.entity';
 import { AnnouncementsService } from '../announcements/announcements.service';
@@ -183,12 +184,16 @@ export class ApplicationsService {
       throw new BadRequestException('You cannot apply to your own announcement');
     }
 
-    // One application per user per announcement
-    const existingApplication = await this.applicationRepository.findOne({
-      where: { announcement_id: announcementId, applicant_id: applicantId },
+    // Allow only one pending application per user per announcement; if previous was rejected/closed, user can apply again
+    const existingPending = await this.applicationRepository.findOne({
+      where: {
+        announcement_id: announcementId,
+        applicant_id: applicantId,
+        status: ApplicationStatus.PENDING,
+      },
     });
-    if (existingApplication) {
-      throw new BadRequestException('You have already applied to this announcement');
+    if (existingPending) {
+      throw new BadRequestException('You already have a pending application for this announcement');
     }
 
     // Validate count for goods category
@@ -283,8 +288,71 @@ export class ApplicationsService {
   }
 
   /**
-   * Get applications for an announcement: only PENDING and APPROVED.
-   * Access: announcement owner or admin only.
+   * Update application: only announcement owner can edit, and only when application is PENDING.
+   */
+  async update(
+    applicationId: string,
+    updateDto: UpdateApplicationDto,
+    userId: string,
+  ): Promise<Application> {
+    const application = await this.applicationRepository.findOne({
+      where: { id: applicationId },
+      relations: ['announcement'],
+      withDeleted: false,
+    });
+
+    if (!application) {
+      throw new NotFoundException(`Application with ID ${applicationId} not found`);
+    }
+
+    const announcement = await this.announcementRepository.findOne({
+      where: { id: application.announcement_id },
+    });
+
+    if (!announcement) {
+      throw new NotFoundException('Announcement not found');
+    }
+
+    if (announcement.owner_id !== userId) {
+      throw new ForbiddenException('Only the announcement owner can edit applications');
+    }
+
+    if (application.status !== ApplicationStatus.PENDING) {
+      throw new BadRequestException(
+        'Only pending applications can be edited. Current status: ' + application.status,
+      );
+    }
+
+    if (updateDto.delivery_dates !== undefined) {
+      this.validateDeliveryDates(updateDto.delivery_dates);
+      application.delivery_dates = updateDto.delivery_dates.map((d) => new Date(d));
+    }
+
+    if (updateDto.count !== undefined) {
+      if (announcement.category === AnnouncementCategory.GOODS) {
+        const availableQuantity = Number(announcement.available_quantity ?? 0);
+        if (updateDto.count > availableQuantity) {
+          throw new BadRequestException(
+            `Count cannot exceed available quantity (${availableQuantity})`,
+          );
+        }
+        application.count = updateDto.count;
+      } else {
+        application.count = null;
+      }
+    }
+
+    if (updateDto.notes !== undefined) {
+      application.notes = updateDto.notes;
+    }
+
+    return this.applicationRepository.save(application);
+  }
+
+  /**
+   * Get applications for an announcement.
+   * - Owner or admin: all PENDING and APPROVED applications.
+   * - Applicant: only their own applications for this announcement (any status).
    */
   async findByAnnouncement(
     announcementId: string,
@@ -303,18 +371,32 @@ export class ApplicationsService {
 
     const isOwner = announcement.owner_id === userId;
     const isAdmin = userType === UserType.ADMIN;
-    if (!isOwner && !isAdmin) {
-      throw new ForbiddenException('Only the announcement owner or an admin can view applications');
-    }
 
     const pageNum = page || 1;
     const limitNum = limit || 20;
     const skip = (pageNum - 1) * limitNum;
 
+    if (isOwner || isAdmin) {
+      // Owner or admin: see all PENDING and APPROVED applications
+      const [applications, total] = await this.applicationRepository.findAndCount({
+        where: {
+          announcement_id: announcementId,
+          status: In([ApplicationStatus.PENDING, ApplicationStatus.APPROVED]),
+        },
+        relations: ['applicant'],
+        order: { created_at: 'DESC' },
+        withDeleted: false,
+        skip,
+        take: limitNum,
+      });
+      return { applications, total, page: pageNum, limit: limitNum };
+    }
+
+    // Applicant: see only their own applications for this announcement (any status)
     const [applications, total] = await this.applicationRepository.findAndCount({
       where: {
         announcement_id: announcementId,
-        status: In([ApplicationStatus.PENDING, ApplicationStatus.APPROVED]),
+        applicant_id: userId,
       },
       relations: ['applicant'],
       order: { created_at: 'DESC' },
@@ -561,14 +643,50 @@ export class ApplicationsService {
   }
 
   /**
-   * Close application (convenience method)
+   * Close application. Allowed for:
+   * - Announcement owner (announcer): closes the application.
+   * - Application owner (applicant): closes/cancels their own application (only when PENDING).
    */
   async close(
     announcementId: string,
     applicationId: string,
     userId: string,
   ): Promise<Application> {
-    return this.updateStatus(announcementId, applicationId, ApplicationStatus.CLOSED, userId);
+    const announcement = await this.announcementRepository.findOne({
+      where: { id: announcementId },
+    });
+    if (!announcement) {
+      throw new NotFoundException('Announcement not found');
+    }
+
+    const application = await this.applicationRepository.findOne({
+      where: { id: applicationId, announcement_id: announcementId },
+      relations: ['applicant'],
+    });
+    if (!application) {
+      throw new NotFoundException('Application not found');
+    }
+
+    const isAnnouncementOwner = announcement.owner_id === userId;
+    const isApplicationOwner = application.applicant_id === userId;
+
+    if (isAnnouncementOwner) {
+      return this.updateStatus(announcementId, applicationId, ApplicationStatus.CLOSED, userId);
+    }
+
+    if (isApplicationOwner) {
+      if (application.status !== ApplicationStatus.PENDING) {
+        throw new BadRequestException(
+          'Only pending applications can be closed by the applicant. Current status: ' + application.status,
+        );
+      }
+      application.status = ApplicationStatus.CLOSED;
+      const updated = await this.applicationRepository.save(application);
+      this.logger.log(`Application ${applicationId} closed by applicant`);
+      return updated;
+    }
+
+    throw new ForbiddenException('Only the announcement owner or the application owner can close this application');
   }
 }
 

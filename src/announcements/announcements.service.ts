@@ -26,6 +26,8 @@ import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
 import { FcmService } from '../notifications/fcm.service';
 import { DeviceTokenService } from '../notifications/device-token.service';
+import { NotificationService } from '../notifications/notification.service';
+import { NotificationType } from '../entities/notification.entity';
 import { StorageService } from '../storage/storage.service';
 
 @Injectable()
@@ -51,6 +53,7 @@ export class AnnouncementsService {
     private applicationRepository: Repository<Application>,
     private fcmService: FcmService,
     private deviceTokenService: DeviceTokenService,
+    private notificationService: NotificationService,
     private storageService: StorageService,
     private configService: ConfigService,
   ) {}
@@ -412,14 +415,18 @@ export class AnnouncementsService {
     // Determine initial status (only goods can be auto-published; rent/service always pending)
     const status = this.determineInitialStatus(createDto.category, createDto.description, createDto.images);
 
-    // Calculate expiry_date if admin has configured default expiry days
+    // Expiry date: use end date (date_to) when present, otherwise default expiry days if configured
     let expiryDate: Date | null = null;
-    const defaultExpiryDays = this.configService.get<number>('ANNOUNCEMENT_DEFAULT_EXPIRY_DAYS');
-    if (defaultExpiryDays && defaultExpiryDays > 0) {
-      const expiry = new Date();
-      expiry.setDate(expiry.getDate() + defaultExpiryDays);
-      expiry.setHours(0, 0, 0, 0);
-      expiryDate = expiry;
+    if (createDto.date_to) {
+      expiryDate = this.parseDate(createDto.date_to);
+    } else {
+      const defaultExpiryDays = this.configService.get<number>('ANNOUNCEMENT_DEFAULT_EXPIRY_DAYS');
+      if (defaultExpiryDays && defaultExpiryDays > 0) {
+        const expiry = new Date();
+        expiry.setDate(expiry.getDate() + defaultExpiryDays);
+        expiry.setHours(0, 0, 0, 0);
+        expiryDate = expiry;
+      }
     }
 
     // Create announcement
@@ -439,13 +446,9 @@ export class AnnouncementsService {
       daily_limit: createDto.category === AnnouncementCategory.GOODS ? (createDto.daily_limit || null) : null,
       unit: createDto.unit || null,
       images: createDto.images || [],
-      // For rent: dates required, others: NULL
-      date_from: createDto.category === AnnouncementCategory.RENT && createDto.date_from 
-        ? this.parseDate(createDto.date_from) 
-        : null,
-      date_to: createDto.category === AnnouncementCategory.RENT && createDto.date_to 
-        ? this.parseDate(createDto.date_to) 
-        : null,
+      // date_from / date_to: use when provided (required for rent, optional for others)
+      date_from: createDto.date_from ? this.parseDate(createDto.date_from) : null,
+      date_to: createDto.date_to ? this.parseDate(createDto.date_to) : null,
       min_area: createDto.min_area || null,
       regions: createDto.regions || [],
       villages: createDto.villages || [],
@@ -1019,7 +1022,12 @@ export class AnnouncementsService {
     }
     
     if (updateDto.date_to !== undefined) {
-      updatedFields.date_to = this.parseDate(updateDto.date_to);
+      const dateTo = this.parseDate(updateDto.date_to);
+      updatedFields.date_to = dateTo;
+      // Use end date as expiry date for rent (and any announcement with date_to)
+      if (announcement.category === AnnouncementCategory.RENT) {
+        updatedFields.expiry_date = dateTo;
+      }
     }
 
     if (updateDto.expiry_date !== undefined) {
@@ -1077,16 +1085,107 @@ export class AnnouncementsService {
     announcement.status = AnnouncementStatus.PUBLISHED;
     await this.announcementRepository.save(announcement);
 
-    // Notify owner
-    await this.sendNotificationToUser(
-      announcement.owner_id,
-      'Announcement Published',
-      `Your announcement "${this.generateSummary(announcement)}" has been approved and published.`,
-      { announcementId: announcement.id }
-    );
+    // Notify owner (creates DB record + push notification)
+    try {
+      await this.notificationService.create({
+        user_id: announcement.owner_id,
+        type: NotificationType.ANNOUNCEMENT_PUBLISHED,
+        title: 'Announcement Published',
+        body: `Your announcement "${this.generateSummary(announcement)}" has been approved and published.`,
+        data: {
+          announcement_id: announcement.id,
+          announcement_type: announcement.type,
+          announcement_category: announcement.category,
+        },
+        sendPush: true,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to notify owner about published announcement ${announcement.id}: ${error.message}`);
+      // Don't throw - continue with region notifications
+    }
+
+    // Notify users in matching regions about the new announcement
+    await this.notifyUsersInRegions(announcement);
 
     // Return enriched announcement
     return this.findOne(id);
+  }
+
+  /**
+   * Notify users in matching regions about a newly published announcement
+   * Excludes the announcement owner
+   */
+  private async notifyUsersInRegions(announcement: Announcement): Promise<void> {
+    // Only notify if announcement has regions
+    if (!announcement.regions || announcement.regions.length === 0) {
+      this.logger.log(`Announcement ${announcement.id} has no regions, skipping region notifications`);
+      return;
+    }
+
+    try {
+      // Find users whose region_id matches any of the announcement's regions
+      // Exclude the announcement owner
+      const usersInRegions = await this.userRepository.find({
+        where: {
+          region_id: In(announcement.regions),
+          verified: true, // Only notify verified users
+          is_locked: false, // Don't notify locked users
+        },
+        select: ['id', 'full_name', 'region_id'],
+      });
+
+      // Filter out the announcement owner
+      const usersToNotify = usersInRegions.filter(user => user.id !== announcement.owner_id);
+
+      if (usersToNotify.length === 0) {
+        this.logger.log(`No users found in regions ${announcement.regions.join(', ')} to notify`);
+        return;
+      }
+
+      this.logger.log(
+        `Notifying ${usersToNotify.length} user(s) in regions ${announcement.regions.join(', ')} about announcement ${announcement.id}`
+      );
+
+      // Generate announcement summary for notification
+      const itemName = announcement.item?.name_en || announcement.item?.name_am || 'item';
+      const categoryName = announcement.category === AnnouncementCategory.GOODS ? 'goods' :
+                          announcement.category === AnnouncementCategory.RENT ? 'rent' : 'service';
+      const typeName = announcement.type === AnnouncementType.SELL ? 'sell' : 'buy';
+
+      // Send notifications to all matching users
+      const notificationPromises = usersToNotify.map(user =>
+        this.notificationService.create({
+          user_id: user.id,
+          type: NotificationType.ANNOUNCEMENT_PUBLISHED,
+          title: 'New Announcement in Your Region',
+          body: `New ${typeName} ${categoryName} announcement: ${itemName} - ${announcement.price} AMD`,
+          data: {
+            announcement_id: announcement.id,
+            announcement_type: announcement.type,
+            announcement_category: announcement.category,
+            region_ids: announcement.regions,
+          },
+          sendPush: true,
+        }).catch(error => {
+          this.logger.warn(`Failed to notify user ${user.id} about announcement ${announcement.id}: ${error.message}`);
+          return null;
+        })
+      );
+
+      const results = await Promise.allSettled(notificationPromises);
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+      const failureCount = results.length - successCount;
+
+      this.logger.log(
+        `Region notifications sent: ${successCount} successful, ${failureCount} failed for announcement ${announcement.id}`
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to send region notifications for announcement ${announcement.id}: ${error.message}`,
+        error.stack
+      );
+      // Don't throw - announcement is already published
+    }
   }
 
   /**
@@ -1280,7 +1379,8 @@ export class AnnouncementsService {
   }
 
   /**
-   * Auto-close expired rent announcements (scheduled task)
+   * Auto-close expired rent announcements (scheduled task).
+   * Uses date_to as end date; when date_to has passed, status is set to CLOSED.
    */
   async closeExpiredRentAnnouncements(): Promise<void> {
     const today = new Date();
@@ -1314,7 +1414,8 @@ export class AnnouncementsService {
   }
 
   /**
-   * Auto-close announcements where expiry_date has passed (scheduled task)
+   * Auto-close announcements where expiry_date has passed (scheduled task).
+   * expiry_date is set from end date (e.g. date_to for rent) on create/update, so both end date and expiry date result in auto-close.
    */
   async closeExpiredAnnouncements(): Promise<void> {
     const today = new Date();

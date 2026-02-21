@@ -174,9 +174,13 @@ export class AnnouncementsController {
       }
     }
 
-    // Parse arrays from multipart form data
+    // Parse arrays and dates from multipart form data (support both snake_case and camelCase)
+    const dateFromRaw = createDto.date_from ?? createDto.dateFrom;
+    const dateToRaw = createDto.date_to ?? createDto.dateTo;
     const parsedDto: CreateAnnouncementDto = {
       ...createDto,
+      date_from: typeof dateFromRaw === 'string' && dateFromRaw.trim() ? dateFromRaw.trim() : undefined,
+      date_to: typeof dateToRaw === 'string' && dateToRaw.trim() ? dateToRaw.trim() : undefined,
       // Ensure regions is an array
       regions: Array.isArray(createDto.regions) 
         ? createDto.regions 
@@ -520,9 +524,13 @@ export class AnnouncementsController {
     @UploadedFiles() files: { images?: any[] }, // Express.Multer.File[]
     @Request() req,
   ) {
-    // Parse arrays from multipart form data
+    // Parse arrays and dates from multipart form data (support both snake_case and camelCase)
+    const dateFromRaw = updateDto.date_from ?? updateDto.dateFrom;
+    const dateToRaw = updateDto.date_to ?? updateDto.dateTo;
     const parsedDto: UpdateAnnouncementDto = {
       ...updateDto,
+      date_from: typeof dateFromRaw === 'string' && dateFromRaw.trim() ? dateFromRaw.trim() : undefined,
+      date_to: typeof dateToRaw === 'string' && dateToRaw.trim() ? dateToRaw.trim() : undefined,
       // Ensure regions is an array
       regions: Array.isArray(updateDto.regions) 
         ? updateDto.regions 

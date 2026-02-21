@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Param,
   Body,
   Query,
@@ -14,6 +15,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
+import { UpdateApplicationDto } from './dto/update-application.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('applications')
@@ -208,6 +210,24 @@ export class ApplicationsController {
     return this.applicationsService.findMyApplications(req.user.id, pageNum, limitNum);
   }
 
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Edit application (announcement owner only, when application is pending)',
+  })
+  @ApiResponse({ status: 200, description: 'Application updated successfully' })
+  @ApiResponse({ status: 400, description: 'Only pending applications can be edited' })
+  @ApiResponse({ status: 403, description: 'Only the announcement owner can edit' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  async update(
+    @Param('id') applicationId: string,
+    @Body() updateDto: UpdateApplicationDto,
+    @Request() req,
+  ) {
+    return this.applicationsService.update(applicationId, updateDto, req.user.id);
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -263,13 +283,16 @@ export class ApplicationsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Close application (announcer only)' })
+  @ApiOperation({
+    summary: 'Close application',
+    description: 'Announcement owner can close any time. Application owner (applicant) can close their own application only when it is pending.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Application closed successfully',
   })
-  @ApiResponse({ status: 400, description: 'Invalid status transition' })
-  @ApiResponse({ status: 403, description: 'Not the announcer' })
+  @ApiResponse({ status: 400, description: 'Invalid status transition or only pending can be closed by applicant' })
+  @ApiResponse({ status: 403, description: 'Not the announcer or the applicant' })
   async close(
     @Param('id') applicationId: string,
     @Request() req,
