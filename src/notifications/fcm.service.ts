@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as admin from 'firebase-admin';
+import { JWT } from 'google-auth-library';
 
 export interface NotificationPayload {
   title: string;
@@ -11,7 +11,8 @@ export interface NotificationPayload {
 @Injectable()
 export class FcmService {
   private readonly logger = new Logger(FcmService.name);
-  private firebaseApp: admin.app.App | null = null;
+  private jwtClient: JWT | null = null;
+  private projectId: string | null = null;
 
   constructor(private configService: ConfigService) {
     this.initializeFirebase();
@@ -20,93 +21,136 @@ export class FcmService {
   private initializeFirebase(): void {
     try {
       const serviceAccount = this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT');
-      
+
       if (!serviceAccount) {
         this.logger.warn('FIREBASE_SERVICE_ACCOUNT not configured. FCM notifications will be disabled.');
         return;
       }
 
-      let serviceAccountJson: admin.ServiceAccount;
+      let serviceAccountJson: any;
 
-      // Check if it's a file path (starts with ./ or / or contains .json)
       if (serviceAccount.startsWith('./') || serviceAccount.startsWith('/') || serviceAccount.endsWith('.json')) {
-        // It's a file path - read the file
         const fs = require('fs');
         const path = require('path');
         const filePath = path.resolve(process.cwd(), serviceAccount);
-        
+
         if (!fs.existsSync(filePath)) {
           this.logger.error(`Firebase service account file not found: ${filePath}`);
           return;
         }
 
-        const fileContent = fs.readFileSync(filePath, 'utf8');
-        serviceAccountJson = JSON.parse(fileContent);
+        serviceAccountJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         this.logger.log(`Firebase service account loaded from file: ${filePath}`);
       } else {
-        // It's a JSON string - parse it directly
         serviceAccountJson = JSON.parse(serviceAccount);
         this.logger.log('Firebase service account loaded from environment variable');
       }
 
-      if (!admin.apps.length) {
-        this.firebaseApp = admin.initializeApp({
-          credential: admin.credential.cert(serviceAccountJson),
-        });
-      } else {
-        this.firebaseApp = admin.apps[0];
-      }
+      this.projectId = serviceAccountJson.project_id;
+
+      this.jwtClient = new JWT({
+        email: serviceAccountJson.client_email,
+        key: serviceAccountJson.private_key,
+        scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
+      });
+
+      this.logger.log(`FCM HTTP v1 client initialized for project: ${this.projectId}`);
     } catch (error) {
-      this.logger.error('Failed to initialize Firebase Admin:', error);
+      this.logger.error('Failed to initialize FCM client:', error);
     }
+  }
+
+  /**
+   * Get a fresh OAuth2 access token from the service account
+   */
+  private async getAccessToken(): Promise<string | null> {
+    if (!this.jwtClient) return null;
+    try {
+      const tokenResponse = await this.jwtClient.getAccessToken();
+      return tokenResponse.token ?? null;
+    } catch (error) {
+      this.logger.error(`Failed to get FCM access token: ${error.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Send a single FCM message via HTTP v1 API
+   */
+  private async sendMessage(message: Record<string, any>): Promise<{ success: boolean; error?: string }> {
+    const accessToken = await this.getAccessToken();
+    if (!accessToken) {
+      return { success: false, error: 'Could not obtain access token' };
+    }
+
+    const url = `https://fcm.googleapis.com/v1/projects/${this.projectId}/messages:send`;
+    const body = JSON.stringify({ message });
+    console.info(body);
+
+    return new Promise((resolve) => {
+      const https = require('https');
+      const urlObj = new URL(url);
+
+      const options = {
+        hostname: urlObj.hostname,
+        path: urlObj.pathname,
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      };
+
+      const req = https.request(options, (res: any) => {
+        let data = '';
+        res.on('data', (chunk: any) => (data += chunk));
+        res.on('end', () => {
+          if (res.statusCode === 200) {
+            resolve({ success: true });
+          } else {
+            let errorCode = `HTTP ${res.statusCode}`;
+            try {
+              const parsed = JSON.parse(data);
+              errorCode = parsed?.error?.message || errorCode;
+            } catch {
+              // keep raw status
+            }
+            resolve({ success: false, error: errorCode });
+          }
+        });
+      });
+
+      req.on('error', (err: any) => resolve({ success: false, error: err.message }));
+      req.write(body);
+      req.end();
+    });
   }
 
   /**
    * Send notification to a single device
    */
-  async sendToDevice(
-    token: string,
-    payload: NotificationPayload
-  ): Promise<boolean> {
-    if (!this.firebaseApp) {
-      this.logger.warn('Firebase not initialized. Skipping notification.');
+  async sendToDevice(token: string, payload: NotificationPayload): Promise<boolean> {
+    if (!this.jwtClient) {
+      this.logger.warn('FCM not initialized. Skipping notification.');
       return false;
     }
 
-    try {
-      const message: admin.messaging.Message = {
-        token,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-        },
-        data: payload.data || {},
-        android: {
-          priority: 'high',
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-            },
-          },
-        },
-      };
+    const result = await this.sendMessage({
+      token,
+      notification: { title: payload.title, body: payload.body },
+      data: payload.data || {},
+      android: { priority: 'high' },
+      apns: { payload: { aps: { sound: 'default' } } },
+    });
 
-      const response = await admin.messaging().send(message);
-      this.logger.log(`Notification sent successfully: ${response}`);
-      return true;
-    } catch (error: any) {
-      this.logger.error(`Failed to send notification to device ${token}:`, error);
-      
-      // Handle invalid token
-      if (error.code === 'messaging/invalid-registration-token' || 
-          error.code === 'messaging/registration-token-not-registered') {
-        this.logger.warn(`Invalid or unregistered token: ${token}`);
-      }
-      
-      return false;
+    if (result.success) {
+      this.logger.log(`Notification sent successfully to device`);
+    } else {
+      this.logger.warn(`Failed to send notification to device ${token.substring(0, 20)}...: ${result.error}`);
     }
+
+    return result.success;
   }
 
   /**
@@ -115,98 +159,75 @@ export class FcmService {
    */
   async sendToDevices(
     tokens: string[],
-    payload: NotificationPayload
+    payload: NotificationPayload,
   ): Promise<{ successCount: number; failureCount: number; invalidTokens: string[]; failureReason?: string }> {
-    if (!this.firebaseApp || tokens.length === 0) {
+    if (!this.jwtClient || tokens.length === 0) {
       return { successCount: 0, failureCount: 0, invalidTokens: [] };
     }
 
-    try {
-      const message: admin.messaging.MulticastMessage = {
-        tokens,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-        },
-        data: payload.data || {},
-        android: {
-          priority: 'high',
-        },
-        apns: {
-          payload: {
-            aps: {
-              sound: 'default',
-            },
-          },
-        },
-      };
-
-      const response = await admin.messaging().sendEachForMulticast(message);
-      const invalidTokens: string[] = [];
-      let failureReason: string | undefined;
-
-      if (response.responses) {
-        response.responses.forEach((resp, idx) => {
-          const token = tokens[idx];
-          if (!resp.success && resp.error) {
-            const code = (resp.error as any).code || '';
-            const msg = (resp.error as any).message || resp.error.toString();
-            if (!failureReason) failureReason = code;
-            this.logger.warn(
-              `FCM send failed for device: ${code} - ${msg} (token: ${token?.substring(0, 20)}...)`
-            );
-            if (
-              code === 'messaging/invalid-registration-token' ||
-              code === 'messaging/registration-token-not-registered'
-            ) {
-              invalidTokens.push(token);
-            }
-          }
+    const results = await Promise.all(
+      tokens.map(async (token) => {
+        const result = await this.sendMessage({
+          token,
+          notification: { title: payload.title, body: payload.body },
+          data: payload.data || {},
+          android: { priority: 'high' },
+          apns: { payload: { aps: { sound: 'default' } } },
         });
+        return { token, ...result };
+      }),
+    );
+
+    const invalidTokens: string[] = [];
+    let failureReason: string | undefined;
+    let successCount = 0;
+    let failureCount = 0;
+
+    for (const r of results) {
+      if (r.success) {
+        successCount++;
+      } else {
+        failureCount++;
+        if (!failureReason) failureReason = r.error;
+        this.logger.warn(`FCM send failed for device (${r.token.substring(0, 20)}...): ${r.error}`);
+
+        if (
+          r.error?.includes('UNREGISTERED') ||
+          r.error?.includes('INVALID_ARGUMENT') ||
+          r.error?.includes('invalid-registration-token') ||
+          r.error?.includes('registration-token-not-registered')
+        ) {
+          invalidTokens.push(r.token);
+        }
       }
-
-      this.logger.log(
-        `Notifications sent: ${response.successCount} successful, ${response.failureCount} failed`
-      );
-
-      return {
-        successCount: response.successCount,
-        failureCount: response.failureCount,
-        invalidTokens,
-        failureReason,
-      };
-    } catch (error) {
-      this.logger.error('Failed to send multicast notification:', error);
-      return { successCount: 0, failureCount: tokens.length, invalidTokens: [] };
     }
+
+    this.logger.log(`Notifications sent: ${successCount} successful, ${failureCount} failed`);
+
+    return { successCount, failureCount, invalidTokens, failureReason };
   }
 
   /**
    * Send notification to a topic
    */
   async sendToTopic(topic: string, payload: NotificationPayload): Promise<boolean> {
-    if (!this.firebaseApp) {
-      this.logger.warn('Firebase not initialized. Skipping notification.');
+    if (!this.jwtClient) {
+      this.logger.warn('FCM not initialized. Skipping notification.');
       return false;
     }
 
-    try {
-      const message: admin.messaging.Message = {
-        topic,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-        },
-        data: payload.data || {},
-      };
+    const result = await this.sendMessage({
+      topic,
+      notification: { title: payload.title, body: payload.body },
+      data: payload.data || {},
+    });
 
-      const response = await admin.messaging().send(message);
-      this.logger.log(`Notification sent to topic ${topic}: ${response}`);
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to send notification to topic ${topic}:`, error);
-      return false;
+    if (result.success) {
+      this.logger.log(`Notification sent to topic ${topic}`);
+    } else {
+      this.logger.error(`Failed to send notification to topic ${topic}: ${result.error}`);
     }
+
+    return result.success;
   }
 }
-

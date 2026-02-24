@@ -288,7 +288,7 @@ export class ApplicationsService {
   }
 
   /**
-   * Update application: only announcement owner can edit, and only when application is PENDING.
+   * Update application: announcement owner or application owner (applicant) can edit, only when status is PENDING.
    */
   async update(
     applicationId: string,
@@ -313,8 +313,8 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId) {
-      throw new ForbiddenException('Only the announcement owner can edit applications');
+    if (announcement.owner_id !== userId && application.applicant_id !== userId) {
+      throw new ForbiddenException('Only the announcement owner or the application owner (applicant) can edit this application');
     }
 
     if (application.status !== ApplicationStatus.PENDING) {
@@ -351,7 +351,7 @@ export class ApplicationsService {
 
   /**
    * Get applications for an announcement.
-   * - Owner or admin: all PENDING and APPROVED applications.
+   * - Owner or admin: all applications (any status).
    * - Applicant: only their own applications for this announcement (any status).
    */
   async findByAnnouncement(
@@ -376,14 +376,22 @@ export class ApplicationsService {
     const limitNum = limit || 20;
     const skip = (pageNum - 1) * limitNum;
 
+    const applicantSelect = {
+      id: true, full_name: true, phone: true,
+      profile_picture: true, user_type: true,
+    };
+
     if (isOwner || isAdmin) {
-      // Owner or admin: see all PENDING and APPROVED applications
+      // Owner or admin: see all applications (any status)
       const [applications, total] = await this.applicationRepository.findAndCount({
-        where: {
-          announcement_id: announcementId,
-          status: In([ApplicationStatus.PENDING, ApplicationStatus.APPROVED]),
-        },
+        where: { announcement_id: announcementId },
         relations: ['applicant'],
+        select: {
+          id: true, announcement_id: true, applicant_id: true,
+          count: true, delivery_dates: true, notes: true,
+          status: true, created_at: true, updated_at: true,
+          applicant: applicantSelect,
+        },
         order: { created_at: 'DESC' },
         withDeleted: false,
         skip,
@@ -399,6 +407,12 @@ export class ApplicationsService {
         applicant_id: userId,
       },
       relations: ['applicant'],
+      select: {
+        id: true, announcement_id: true, applicant_id: true,
+        count: true, delivery_dates: true, notes: true,
+        status: true, created_at: true, updated_at: true,
+        applicant: applicantSelect,
+      },
       order: { created_at: 'DESC' },
       withDeleted: false,
       skip,
@@ -425,9 +439,27 @@ export class ApplicationsService {
     const limitNum = limit || 20;
     const skip = (pageNum - 1) * limitNum;
 
+    const safeUserSelect = {
+      id: true, full_name: true, phone: true,
+      profile_picture: true, user_type: true,
+    };
+
     const [applications, total] = await this.applicationRepository.findAndCount({
       where: { applicant_id: userId },
-      relations: ['announcement', 'announcement.owner'],
+      relations: ['applicant', 'announcement', 'announcement.owner'],
+      select: {
+        id: true, announcement_id: true, applicant_id: true,
+        count: true, delivery_dates: true, notes: true,
+        status: true, created_at: true, updated_at: true,
+        applicant: safeUserSelect,
+        announcement: {
+          id: true, type: true, category: true, price: true,
+          description: true, status: true, images: true,
+          count: true, unit: true, date_from: true, date_to: true,
+          expiry_date: true, created_at: true,
+          owner: safeUserSelect,
+        },
+      },
       order: { created_at: 'DESC' },
       withDeleted: false,
       skip,

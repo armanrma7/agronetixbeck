@@ -257,7 +257,14 @@ export class StorageService {
         .createSignedUrl(fileName, this.urlExpirationSeconds);
 
       if (error) {
-        this.logger.error(`Failed to generate signed URL for ${fileName}: ${error.message}`);
+        const isNotFound = error.message?.toLowerCase().includes('not found') ||
+          error.message?.toLowerCase().includes('object not found');
+        if (isNotFound) {
+          // Orphaned path — file was deleted from storage but DB still references it
+          this.logger.warn(`Image not found in storage (orphaned): ${fileName}`);
+        } else {
+          this.logger.error(`Failed to generate signed URL for ${fileName}: ${error.message}`);
+        }
         return null;
       }
 
@@ -269,7 +276,8 @@ export class StorageService {
   }
 
   /**
-   * Generate signed URLs from an array of file paths
+   * Generate signed URLs from an array of file paths.
+   * Returns only the successfully resolved URLs (null entries are filtered out).
    */
   async getSignedUrls(filePaths: string[]): Promise<string[]> {
     if (!filePaths || filePaths.length === 0) {
@@ -278,9 +286,37 @@ export class StorageService {
 
     const urlPromises = filePaths.map((path) => this.getSignedUrl(path));
     const urls = await Promise.all(urlPromises);
-    
-    // Filter out null values
+
     return urls.filter((url): url is string => url !== null);
+  }
+
+  /**
+   * Generate signed URLs and return both resolved URLs and orphaned paths (not found in storage).
+   * Use this when you need to clean up DB references to deleted files.
+   */
+  async getSignedUrlsWithOrphans(
+    filePaths: string[],
+  ): Promise<{ signedUrls: string[]; orphanedPaths: string[] }> {
+    if (!filePaths || filePaths.length === 0) {
+      return { signedUrls: [], orphanedPaths: [] };
+    }
+
+    const results = await Promise.all(
+      filePaths.map(async (path) => ({ path, url: await this.getSignedUrl(path) })),
+    );
+
+    const signedUrls: string[] = [];
+    const orphanedPaths: string[] = [];
+
+    for (const { path, url } of results) {
+      if (url !== null) {
+        signedUrls.push(url);
+      } else {
+        orphanedPaths.push(path);
+      }
+    }
+
+    return { signedUrls, orphanedPaths };
   }
 }
 

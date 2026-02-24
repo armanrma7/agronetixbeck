@@ -214,11 +214,11 @@ export class ApplicationsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Edit application (announcement owner only, when application is pending)',
+    summary: 'Edit application (announcer or applicant, when pending)',
   })
   @ApiResponse({ status: 200, description: 'Application updated successfully' })
   @ApiResponse({ status: 400, description: 'Only pending applications can be edited' })
-  @ApiResponse({ status: 403, description: 'Only the announcement owner can edit' })
+  @ApiResponse({ status: 403, description: 'Not the announcer or the applicant' })
   @ApiResponse({ status: 404, description: 'Application not found' })
   async update(
     @Param('id') applicationId: string,

@@ -185,13 +185,29 @@ export class AnnouncementsService {
   }
 
   /**
-   * Enrich announcement with signed URLs for images
-   * Converts stored file paths (keys) to signed URLs
+   * Enrich announcement with signed URLs for images.
+   * Converts stored file paths (keys) to signed URLs.
+   * Automatically removes orphaned image paths (deleted from storage) from the DB record.
    */
   private async enrichWithSignedUrls(announcement: Announcement): Promise<Announcement> {
     if (announcement.images && announcement.images.length > 0) {
-      const signedUrls = await this.storageService.getSignedUrls(announcement.images);
-      // Replace images array with signed URLs
+      const { signedUrls, orphanedPaths } = await this.storageService.getSignedUrlsWithOrphans(
+        announcement.images,
+      );
+
+      // Fire-and-forget: clean up orphaned paths from the DB so we stop logging them
+      if (orphanedPaths.length > 0) {
+        this.logger.warn(
+          `Removing ${orphanedPaths.length} orphaned image path(s) from announcement ${announcement.id}: ${orphanedPaths.join(', ')}`,
+        );
+        const cleanedImages = announcement.images.filter((p) => !orphanedPaths.includes(p));
+        this.announcementRepository
+          .update(announcement.id, { images: cleanedImages })
+          .catch((err) =>
+            this.logger.error(`Failed to clean up orphaned images for ${announcement.id}: ${err.message}`),
+          );
+      }
+
       return {
         ...announcement,
         images: signedUrls,
