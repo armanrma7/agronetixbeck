@@ -6,7 +6,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS for production
+  // Enable CORS
   app.enableCors({
     origin: process.env.CORS_ORIGIN || '*',
     credentials: true,
@@ -37,11 +37,14 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  const port = process.env.PORT || 8080;
+  // Use DigitalOcean PORT or fallback
+  const port = process.env.PORT ? parseInt(process.env.PORT, 10) : 8080;
+
+  // Listen on all interfaces
   await app.listen(port, '0.0.0.0');
-  console.log(`Application is running on: http://localhost:${port}`);
-  console.log(`Swagger documentation: http://localhost:${port}/api`);
+
+  console.log(`Application is running on port ${port}`);
+  console.log(`Swagger documentation: http://0.0.0.0:${port}/api`);
 }
 
 bootstrap();
-
