@@ -36,10 +36,13 @@ export class OtpCode {
   expires_at: Date;
 
   @Column({ type: 'int', default: 0 })
-  attempts: number; // Number of verification attempts
+  attempts: number; // Number of wrong verification attempts
+
+  @Column({ type: 'int', default: 0 })
+  resend_count: number; // Number of times OTP was resent (initial send = 0, first resend = 1, ...)
 
   @Column({ type: 'boolean', default: false })
-  verified: boolean; // Whether OTP has been verified
+  verified: boolean; // True once verified; record is kept for 1 hr for rate-limit tracking then deleted
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   purpose: string; // 'registration', 'forgot_password', etc.

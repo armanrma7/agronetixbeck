@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -18,6 +19,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserOwnerOrAdminGuard } from './guards/user-owner-or-admin.guard';
 
@@ -28,67 +30,34 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Register a new user or update existing unverified user',
-    description: 'If user exists and is verified: returns 409 Conflict. If user exists but not verified: updates credentials, automatically sends OTP, and returns "User updated. Please verify OTP". If user does not exist: creates new user and automatically sends OTP.'
+    description:
+      'Creates (or updates) a user account and automatically sends an OTP via Twilio SMS. ' +
+      'After registering, call POST /auth/verify-otp with the phone number and OTP code to activate the account. ' +
+      'Use POST /auth/send-otp to resend the code (max 3 resends per hour).',
   })
   @ApiResponse({
     status: 201,
-    description: 'User registered/updated successfully. Returns OTP code and user with verified: false',
+    description: 'User registered/updated. OTP sent via SMS.',
     schema: {
       oneOf: [
         {
           example: {
-            message: 'Registration success',
-            user: {
-              id: 'uuid',
-              full_name: 'John Doe',
-              phone: '+1234567890',
-              user_type: 'farmer',
-              verified: false,
-            },
-            otp_code: '123456',
+            message: 'Registration success. OTP sent via SMS — please verify.',
+            user: { id: 'uuid', full_name: 'John Doe', phone: '+1234567890', user_type: 'farmer', verified: false },
           },
         },
         {
           example: {
-            message: 'User updated. Please verify OTP',
-            user: {
-              id: 'uuid',
-              full_name: 'John Doe',
-              phone: '+1234567890',
-              user_type: 'farmer',
-              verified: false,
-            },
-            otp_code: '123456',
+            message: 'User updated. OTP sent via SMS — please verify.',
+            user: { id: 'uuid', full_name: 'John Doe', phone: '+1234567890', user_type: 'farmer', verified: false },
           },
         },
         {
           example: {
-            message: 'User updated. Please verify OTP',
-            user: {
-              id: 'uuid',
-              full_name: 'Company Name',
-              phone: '+1234567890',
-              user_type: 'company',
-              verified: false,
-              account_status: 'pending',
-            },
-            otp_code: '123456',
-          },
-        },
-        {
-          example: {
-            message: 'Awaiting verification',
-            user: {
-              id: 'uuid',
-              full_name: 'Company Name',
-              phone: '+1234567890',
-              user_type: 'company',
-              verified: false,
-              account_status: 'pending',
-            },
-            otp_code: '123456',
+            message: 'Awaiting admin verification. OTP sent via SMS.',
+            user: { id: 'uuid', full_name: 'Company Name', phone: '+1234567890', user_type: 'company', verified: false, account_status: 'pending' },
           },
         },
       ],
@@ -112,30 +81,34 @@ export class AuthController {
 
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Send OTP to phone number' })
+  @ApiOperation({
+    summary: 'Send OTP via Twilio SMS',
+    description:
+      'Sends a 6-digit OTP to the given phone number via Twilio SMS. ' +
+      'Rate limited: initial send + 3 resends = 4 total per phone per hour. ' +
+      'After 4 sends the phone is blocked for the remainder of the 1-hour window.',
+  })
   @ApiResponse({
     status: 200,
-    description: 'OTP sent successfully',
+    description: 'OTP sent successfully.',
     schema: {
-      oneOf: [
-        {
-          example: {
-            success: true,
-            message: 'OTP sent successfully',
-            otp_code: '123456',
-          },
-        },
-        {
-          example: {
-            success: false,
-            message: 'OTP generated but failed to send via SMS',
-            otp_code: '123456',
-          },
-        },
-      ],
+      example: {
+        success: true,
+        message: 'OTP sent to +37494000000. You have 2 resend(s) remaining.',
+      },
     },
   })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({
+    status: 400,
+    description: 'Too many requests — rate limit exceeded.',
+    schema: {
+      example: {
+        statusCode: 400,
+        message: 'Too many OTP requests. You can request a new code in 47 minute(s).',
+      },
+    },
+  })
+  @ApiResponse({ status: 503, description: 'Twilio SMS delivery failed.' })
   async sendOtp(@Body() sendOtpDto: SendOtpDto) {
     return this.authService.sendOtp(
       sendOtpDto.phone,
@@ -326,6 +299,21 @@ export class AuthController {
     @Body() updateUserDto: UpdateUserDto,
   ) {
     return this.authService.updateUser(id, updateUserDto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change password for authenticated user' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({ status: 400, description: 'Current password incorrect or same as new password' })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async changePassword(
+    @Body() dto: ChangePasswordDto,
+    @Request() req,
+  ) {
+    return this.authService.changePassword(req.user.id, dto.current_password, dto.new_password);
   }
 }
 

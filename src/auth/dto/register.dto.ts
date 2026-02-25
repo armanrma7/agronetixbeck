@@ -107,4 +107,3 @@ export class RegisterDto {
   @IsBoolean()
   terms_accepted?: boolean;
 }
-

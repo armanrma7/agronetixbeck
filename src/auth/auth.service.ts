@@ -119,168 +119,98 @@ export class AuthService {
    * - Hashes password
    * - Sets verified status based on user type
    */
-  async register(registerDto: RegisterDto): Promise<{ message: string; user: Partial<User>; otp_code?: string }> {
-    const { phone, full_name, password, user_type, phones, emails, profile_picture, region_id, village_id, terms_accepted = true } = registerDto;
+    async register(registerDto: RegisterDto): Promise<{ message: string; user: Partial<User> }> {
+    const {
+      phone, full_name, password, user_type, phones, emails,
+      profile_picture, region_id, village_id, terms_accepted = true,
+    } = registerDto;
 
-    // Check terms acceptance (defaults to true if not provided)
     if (terms_accepted === false) {
       throw new BadRequestException('Terms not accepted');
     }
 
-    // Validate region_id and village_id if provided
     const { validRegionId, validVillageId } = await this.validateRegionAndVillage(region_id, village_id);
 
-    // Check if phone already exists
-    const existingUserByPhone = await this.userRepository.findOne({
-      where: { phone },
-    });
+    const existing = await this.userRepository.findOne({ where: { phone } });
 
-    // If user exists and is verified, return 409 Conflict
-    if (existingUserByPhone && existingUserByPhone.verified) {
+    if (existing?.verified) {
       throw new ConflictException('User already exists');
     }
 
-    // If user exists but NOT verified, update with new credentials (same logic for all user types)
-    if (existingUserByPhone && !existingUserByPhone.verified) {
-      // Hash new password
-      const hashedPassword = await this.hashPassword(password);
+    // ── Build / update the user record ────────────────────────────────────
+    let savedUser: User;
 
-      // Update user with new credentials (same for company and farmer)
-      existingUserByPhone.full_name = full_name;
-      existingUserByPhone.password = hashedPassword;
-      existingUserByPhone.user_type = user_type;
-      existingUserByPhone.phones = phones || existingUserByPhone.phones || [];
-      existingUserByPhone.emails = emails || existingUserByPhone.emails || [];
-      existingUserByPhone.profile_picture = profile_picture || existingUserByPhone.profile_picture;
-      existingUserByPhone.region_id = validRegionId !== null ? validRegionId : existingUserByPhone.region_id;
-      existingUserByPhone.village_id = validVillageId !== null ? validVillageId : existingUserByPhone.village_id;
-      
-      // Reset verified status (will be set after OTP verification)
-      existingUserByPhone.verified = false;
-      
-      // Update account status based on user type
-      existingUserByPhone.account_status = user_type === UserType.COMPANY 
-        ? AccountStatus.PENDING 
-        : AccountStatus.ACTIVE;
-
-      const updatedUser = await this.userRepository.save(existingUserByPhone);
-
-      // Automatically send OTP after updating user
-      let otpCode: string | undefined;
-      try {
-        const otpResult = await this.otpService.sendOtp(phone, OtpChannel.SMS, 'registration');
-        otpCode = otpResult.otp_code;
-      } catch (error) {
-        // Log error but don't fail registration if OTP sending fails
-        console.error('Failed to send OTP after user update:', error);
+    if (existing) {
+      // Re-registration: update credentials on the existing unverified account
+      existing.full_name     = full_name;
+      existing.password      = await this.hashPassword(password);
+      existing.user_type     = user_type;
+      existing.phones        = phones        ?? existing.phones ?? [];
+      existing.emails        = emails        ?? existing.emails ?? [];
+      existing.profile_picture = profile_picture ?? existing.profile_picture;
+      existing.region_id     = validRegionId  ?? existing.region_id;
+      existing.village_id    = validVillageId ?? existing.village_id;
+      existing.account_status = user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE;
+      existing.verified      = false;
+      savedUser = await this.userRepository.save(existing);
+    } else {
+      // Check duplicate company name before creating
+      if (user_type === UserType.COMPANY) {
+        const dupCompany = await this.userRepository.findOne({
+          where: { full_name, user_type: UserType.COMPANY },
+        });
+        if (dupCompany && dupCompany.phone !== phone) {
+          throw new ConflictException('Duplicate company');
+        }
       }
 
-      // Load relations for response
-      const userWithRelations = await this.userRepository.findOne({
-        where: { id: updatedUser.id },
-        relations: ['region', 'village'],
-      });
-
-      // Remove password from response
-      const { password: __, ...userWithoutPassword } = userWithRelations || updatedUser;
-
-      // Ensure verified is false in response
-      userWithoutPassword.verified = false;
-
-      // Return message - same for all user types
-      return {
-        message: 'User updated. Please verify OTP',
-        user: userWithoutPassword,
-        otp_code: otpCode,
-      };
+      savedUser = await this.userRepository.save(
+        this.userRepository.create({
+          phone, full_name, password: await this.hashPassword(password), user_type,
+          phones: phones ?? [], emails: emails ?? [],
+          profile_picture: profile_picture ?? null,
+          region_id: validRegionId, village_id: validVillageId,
+          account_status: user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE,
+          terms_accepted: terms_accepted ?? true,
+          verified: false,
+          is_locked: false,
+        }),
+      );
     }
 
-    // For Company type, check if company name already exists (only for new registrations)
-    if (user_type === UserType.COMPANY) {
-      const existingCompany = await this.userRepository.findOne({
-        where: { full_name, user_type: UserType.COMPANY },
-      });
-
-      // Only throw error if company exists with different phone (duplicate company name)
-      if (existingCompany && existingCompany.phone !== phone) {
-        throw new ConflictException('Duplicate company');
-      }
-    }
-
-    // Hash password
-    const hashedPassword = await this.hashPassword(password);
-
-    // Create user
-    const user = this.userRepository.create({
-      phone,
-      full_name,
-      password: hashedPassword,
-      user_type,
-      phones: phones || [],
-      emails: emails || [],
-      profile_picture: profile_picture || null,
-      region_id: validRegionId,
-      village_id: validVillageId,
-      account_status: user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE,
-      terms_accepted: terms_accepted ?? true, // Default to true if not provided
-      verified: user_type === UserType.FARMER ? false : false, // Both need OTP/admin verification
-      is_locked: false,
-    });
-
-    const savedUser = await this.userRepository.save(user);
-
-    // Automatically send OTP after creating user
-    let otpCode: string | undefined;
+    // ── Send OTP once, after the user is saved ─────────────────────────────
     try {
-      const otpResult = await this.otpService.sendOtp(phone, OtpChannel.SMS, 'registration');
-      otpCode = otpResult.otp_code;
-    } catch (error) {
-      // Log error but don't fail registration if OTP sending fails
-      console.error('Failed to send OTP after registration:', error);
+      // await this.otpService.sendOtp(phone, OtpChannel.SMS, 'registration');
+    } catch (err) {
+      this.logger.error(`register: OTP send failed for ${phone}: ${(err as Error).message}`);
     }
 
-    // Load relations for response
+    // ── Build response ─────────────────────────────────────────────────────
     const userWithRelations = await this.userRepository.findOne({
       where: { id: savedUser.id },
       relations: ['region', 'village'],
     });
+    const { password: _, ...userWithoutPassword } = userWithRelations ?? savedUser;
 
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = userWithRelations || savedUser;
+    const message = existing
+      ? 'User updated. OTP sent via SMS — please verify.'
+      : user_type === UserType.COMPANY
+        ? 'Awaiting admin verification. OTP sent via SMS.'
+        : 'Registration success. OTP sent via SMS — please verify.';
 
-    // Ensure verified is false in response
-    userWithoutPassword.verified = false;
-
-    // Return appropriate message based on user type
-    if (user_type === UserType.COMPANY) {
-      return {
-        message: 'Awaiting verification',
-        user: userWithoutPassword,
-        otp_code: otpCode,
-      };
-    }
-
-    return {
-      message: 'Registration success',
-      user: userWithoutPassword,
-      otp_code: otpCode,
-    };
+    return { message, user: userWithoutPassword };
   }
 
   /**
-   * Send OTP to phone number
+   * Send OTP to phone number via Twilio SMS.
+   * Rate-limited: max 4 sends (initial + 3 resends) per phone per hour.
    */
-  async sendOtp(phone: string, channel?: OtpChannel, purpose?: string): Promise<{ success: boolean; message: string; otp_code?: string }> {
-    const result = await this.otpService.sendOtp(
-      phone,
-      channel || OtpChannel.SMS,
-      purpose,
-    );
-    return {
-      success: result.success,
-      message: result.message,
-      otp_code: result.otp_code,
-    };
+  async sendOtp(
+    phone: string,
+    channel?: OtpChannel,
+    purpose?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return this.otpService.sendOtp(phone, channel || OtpChannel.SMS, purpose);
   }
 
   /**
@@ -698,6 +628,36 @@ export class AuthService {
       }
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  /**
+   * Change password for authenticated user
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new BadRequestException('New password must be different from the current password');
+    }
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    user.password = hashed;
+    await this.userRepository.save(user);
+
+    this.logger.log(`Password changed for user ${userId}`);
+    return { message: 'Password changed successfully' };
   }
 }
 

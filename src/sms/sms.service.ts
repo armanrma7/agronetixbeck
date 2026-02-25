@@ -1,178 +1,67 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Twilio } from 'twilio';
 
 export interface SmsResult {
   success: boolean;
   message?: string;
   error?: string;
-  responseId?: string;
+  sid?: string; // Twilio message SID
 }
 
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
-  private readonly msg91AuthKey: string;
-  private readonly msg91SenderId: string;
-  private readonly msg91ApiUrl = 'https://api.msg91.com/api/sendhttp.php';
+  private client: Twilio | null = null;
+  private readonly fromPhone: string;
+  private readonly isConfigured: boolean;
 
   constructor(private configService: ConfigService) {
-    this.msg91AuthKey = this.configService.get<string>('MSG91_AUTH_KEY') || '';
-    this.msg91SenderId = this.configService.get<string>('MSG91_SENDER_ID') || 'ACRONET';
+    const accountSid = this.configService.get<string>('TWILIO_ACCOUNT_SID');
+    const authToken = this.configService.get<string>('TWILIO_AUTH_TOKEN');
+    this.fromPhone = this.configService.get<string>('TWILIO_FROM_PHONE') || '';
 
-    if (!this.msg91AuthKey) {
-      this.logger.warn('MSG91_AUTH_KEY not configured. SMS sending will fail in production.');
+    if (!accountSid || !authToken || !this.fromPhone) {
+      this.logger.warn(
+        'Twilio is not fully configured. ' +
+        'Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_PHONE in your .env file.',
+      );
+      this.isConfigured = false;
+    } else {
+      this.client = new Twilio(accountSid, authToken);
+      this.isConfigured = true;
+      this.logger.log(`TwilioService ready — from: ${this.fromPhone}`);
     }
   }
 
   /**
-   * Extract country code from phone number
-   * Assumes phone number is in E.164 format (e.g., +919876543210)
+   * Send an OTP code to a phone number via Twilio SMS.
+   * Phone must be in E.164 format, e.g. +37494000000
    */
-  private extractCountryCode(phone: string): string {
-    // Remove + sign
-    const cleanPhone = phone.replace(/^\+/, '');
-    
-    // Common country codes mapping (can be extended)
-    // India: 91, USA: 1, etc.
-    // For MSG91, we'll try to detect common patterns
-    // if (cleanPhone.startsWith('91')) {
-    //   return '91'; // India
-    // } else if (cleanPhone.startsWith('1')) {
-    //   return '1'; // USA/Canada
-    // } else if (cleanPhone.startsWith('44')) {
-    //   return '44'; // UK
-    // } else if (cleanPhone.startsWith('61')) {
-    //   return '61'; // Australia
-    // }
-    
-    // Default: try first 2 digits as country code
-    // MSG91 will handle validation
-    return cleanPhone.substring(0, 2);
-  }
+  async sendOtp(phone: string, otp: string): Promise<SmsResult> {
+    const body = `Your verification code is: ${otp}. It expires in 5 minutes. Do not share it with anyone.`;
 
-  /**
-   * Send OTP SMS via MSG91 HTTP API
-   * 
-   * @param phone - Phone number in E.164 format (e.g., +919876543210)
-   * @param otp - OTP code to send
-   * @param message - Optional custom message (default: "Your OTP code is ${otp}. Valid for 5 minutes.")
-   * @returns Promise<SmsResult> - Success/failure result
-   */
-  async sendOtp(
-    phone: string,
-    otp: string,
-    message?: string,
-  ): Promise<SmsResult> {
-    // Validate configuration
-    if (!this.msg91AuthKey) {
-      const errorMsg = 'MSG91_AUTH_KEY not configured';
-      this.logger.error(errorMsg);
-      
-      // In development, log and return success to allow testing
+    if (!this.isConfigured) {
+      // In dev mode without credentials, just log so testing is still possible
       if (this.configService.get('NODE_ENV') !== 'production') {
-        this.logger.warn(`[DEV MODE] Would send OTP to ${phone}: ${otp}`);
-        return {
-          success: true,
-          message: 'SMS not sent (dev mode)',
-        };
+        this.logger.warn(`[DEV] Twilio not configured. OTP for ${phone}: ${otp}`);
+        return { success: true, message: 'Dev mode — SMS not sent, OTP logged above' };
       }
-      
-      return {
-        success: false,
-        error: errorMsg,
-      };
+      return { success: false, error: 'Twilio is not configured on this server.' };
     }
-
-    // Validate phone number
-    if (!phone || !phone.startsWith('+')) {
-      const errorMsg = 'Invalid phone number format. Must be in E.164 format (e.g., +919876543210)';
-      this.logger.error(errorMsg);
-      return {
-        success: false,
-        error: errorMsg,
-      };
-    }
-
-    // Prepare message
-    const smsMessage = message || `Your OTP code is ${otp}. Valid for 5 minutes.`;
-
-    // Extract country code
-    const countryCode = this.extractCountryCode(phone);
-
-    // Remove + sign and country code for mobile number
-    const mobileNumber = phone.replace(/^\+/, '').replace(/^[0-9]{1,3}/, '');
-
-    // Build query parameters for MSG91 HTTP API
-    const params = new URLSearchParams({
-      authkey: this.msg91AuthKey,
-      mobiles: phone.replace(/^\+/, ''), // Full number without +
-      message: smsMessage,
-      sender: this.msg91SenderId,
-      route: '4', // Transactional OTP route
-      country: countryCode,
-    });
-
-    const apiUrl = `${this.msg91ApiUrl}?${params.toString()}`;
 
     try {
-      this.logger.debug(`Sending OTP to ${phone} via MSG91`);
-      
-      const response = await fetch(apiUrl, {
-        method: 'GET', // MSG91 HTTP API uses GET
-        headers: {
-          'Accept': 'application/json',
-        },
+      this.logger.log(`Sending OTP SMS to ${phone}...`);
+      const msg = await this.client!.messages.create({
+        body,
+        from: this.fromPhone,
+        to: phone,
       });
-
-      const responseText = await response.text();
-      
-      // MSG91 returns different response formats
-      // Success: Usually returns a request ID or "success"
-      // Error: Returns error message or error code
-      
-      this.logger.log(`MSG91 Response for ${phone}: ${responseText}`);
-
-      // Check if response indicates success
-      // MSG91 typically returns a request ID (numeric string) on success
-      // or error message on failure
-      const isSuccess = /^\d+$/.test(responseText.trim()) || 
-                       responseText.toLowerCase().includes('success') ||
-                       responseText.toLowerCase().includes('submitted');
-
-      if (!isSuccess) {
-        const errorMsg = `MSG91 API error: ${responseText}`;
-        this.logger.error(errorMsg);
-        return {
-          success: false,
-          error: errorMsg,
-          message: responseText,
-        };
-      }
-
-      this.logger.log(`OTP sent successfully to ${phone}`);
-      
-      return {
-        success: true,
-        message: 'OTP sent successfully',
-        responseId: responseText.trim(),
-      };
-
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to send OTP to ${phone}: ${errorMsg}`, error);
-      
-      return {
-        success: false,
-        error: errorMsg,
-      };
+      this.logger.log(`OTP SMS sent to ${phone}, SID=${msg.sid}, status=${msg.status}`);
+      return { success: true, message: 'OTP sent successfully', sid: msg.sid };
+    } catch (err: any) {
+      this.logger.error(`Twilio failed to send SMS to ${phone}: [${err.code}] ${err.message}`);
+      return { success: false, error: `Twilio error ${err.code}: ${err.message}` };
     }
   }
-
-  /**
-   * Validate MSG91 configuration
-   */
-  isConfigured(): boolean {
-    return !!this.msg91AuthKey && !!this.msg91SenderId;
-  }
 }
-
