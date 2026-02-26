@@ -490,16 +490,20 @@ export class AnnouncementsService {
    * Excludes announcements owned by excludeOwnerId if provided
    */
   async findAll(params: {
-    category?: string;
+    category?: string[];
     type?: string;
     status?: AnnouncementStatus;
+    group_id?: string[];
+    subgroup_id?: string[];
     regions?: string[];
     villages?: string[];
+    price_from?: number;
+    price_to?: number;
     created_from?: string;
     created_to?: string;
     page?: number;
     limit?: number;
-    excludeOwnerId?: string; // Exclude announcements owned by this user
+    excludeOwnerId?: string;
   }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     // Validate status enum if provided
     if (params.status) {
@@ -550,15 +554,30 @@ export class AnnouncementsService {
       });
     }
 
-    if (params.category) {
-      queryBuilder.andWhere('announcement.category = :category', {
-        category: params.category,
+    // Filter by category (one or many: match any)
+    if (params.category && params.category.length > 0) {
+      queryBuilder.andWhere('announcement.category IN (:...categories)', {
+        categories: params.category,
       });
     }
 
     if (params.type) {
       queryBuilder.andWhere('announcement.type = :type', {
         type: params.type,
+      });
+    }
+
+    // Filter by group (GoodsCategory) — one or many: match any
+    if (params.group_id && params.group_id.length > 0) {
+      queryBuilder.andWhere('announcement.group_id IN (:...group_ids)', {
+        group_ids: params.group_id,
+      });
+    }
+
+    // Filter by subgroup (GoodsSubcategory) — one or many: match any
+    if (params.subgroup_id && params.subgroup_id.length > 0) {
+      queryBuilder.andWhere('item.subcategory_id IN (:...subgroup_ids)', {
+        subgroup_ids: params.subgroup_id,
       });
     }
 
@@ -573,6 +592,18 @@ export class AnnouncementsService {
     if (params.villages && params.villages.length > 0) {
       queryBuilder.andWhere('announcement.villages && :villages', {
         villages: params.villages,
+      });
+    }
+
+    // Filter by price range
+    if (params.price_from != null) {
+      queryBuilder.andWhere('announcement.price >= :price_from', {
+        price_from: Number(params.price_from),
+      });
+    }
+    if (params.price_to != null) {
+      queryBuilder.andWhere('announcement.price <= :price_to', {
+        price_to: Number(params.price_to),
       });
     }
 
@@ -744,8 +775,13 @@ export class AnnouncementsService {
     userId: string,
     filters?: {
       status?: AnnouncementStatus;
+      category?: string[];
+      group_id?: string[];
+      subgroup_id?: string[];
       regions?: string[];
       villages?: string[];
+      price_from?: number;
+      price_to?: number;
       created_from?: string;
       created_to?: string;
       page?: number;
@@ -789,6 +825,27 @@ export class AnnouncementsService {
       });
     }
 
+    // Filter by category (one or many)
+    if (filters?.category && filters.category.length > 0) {
+      queryBuilder.andWhere('announcement.category IN (:...categories)', {
+        categories: filters.category,
+      });
+    }
+
+    // Filter by group (GoodsCategory) — one or many
+    if (filters?.group_id && filters.group_id.length > 0) {
+      queryBuilder.andWhere('announcement.group_id IN (:...group_ids)', {
+        group_ids: filters.group_id,
+      });
+    }
+
+    // Filter by subgroup (GoodsSubcategory) — one or many
+    if (filters?.subgroup_id && filters.subgroup_id.length > 0) {
+      queryBuilder.andWhere('item.subcategory_id IN (:...subgroup_ids)', {
+        subgroup_ids: filters.subgroup_id,
+      });
+    }
+
     // Apply region filter (array overlap - announcement.regions overlaps with filter regions)
     if (filters?.regions && filters.regions.length > 0) {
       queryBuilder.andWhere('announcement.regions && :regions', {
@@ -800,6 +857,18 @@ export class AnnouncementsService {
     if (filters?.villages && filters.villages.length > 0) {
       queryBuilder.andWhere('announcement.villages && :villages', {
         villages: filters.villages,
+      });
+    }
+
+    // Filter by price range
+    if (filters?.price_from != null) {
+      queryBuilder.andWhere('announcement.price >= :price_from', {
+        price_from: Number(filters.price_from),
+      });
+    }
+    if (filters?.price_to != null) {
+      queryBuilder.andWhere('announcement.price <= :price_to', {
+        price_to: Number(filters.price_to),
       });
     }
 

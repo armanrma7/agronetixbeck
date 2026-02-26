@@ -240,16 +240,23 @@ export class AnnouncementsController {
 
   @Get()
   @UseGuards(OptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Get all announcements with filters (excludes current user\'s announcements if authenticated)' })
-  @ApiQuery({ name: 'category', required: false, enum: ['goods', 'rent', 'service'] })
+  @ApiOperation({
+    summary: 'Get all announcements with filters',
+    description: 'Returns published announcements (or filtered by status). Optional filters: category, type, status, group, subgroup, region, village, price range (price_from, price_to), date range. Category, group_id, and subgroup_id can be repeated for multiple values (OR). Excludes current user\'s announcements if authenticated.',
+  })
+  @ApiQuery({ name: 'category', required: false, enum: ['goods', 'rent', 'service'], isArray: true, description: 'Filter by category (repeat for multiple: ?category=goods&category=rent)' })
   @ApiQuery({ name: 'type', required: false, enum: ['sell', 'buy'] })
   @ApiQuery({ name: 'status', required: false, enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] })
+  @ApiQuery({ name: 'group_id', required: false, isArray: true, description: 'Filter by group — GoodsCategory UUID(s); repeat for multiple' })
+  @ApiQuery({ name: 'subgroup_id', required: false, isArray: true, description: 'Filter by subgroup — GoodsSubcategory UUID(s); repeat for multiple' })
   @ApiQuery({ name: 'region', required: false, description: 'Region UUID (can be multiple: ?region=uuid1&region=uuid2)' })
   @ApiQuery({ name: 'village', required: false, description: 'Village UUID (can be multiple: ?village=uuid1&village=uuid2)' })
+  @ApiQuery({ name: 'price_from', required: false, description: 'Minimum price (inclusive)' })
+  @ApiQuery({ name: 'price_to', required: false, description: 'Maximum price (inclusive)' })
   @ApiQuery({ name: 'created_from', required: false, description: 'Filter by created_at from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'created_to', required: false, description: 'Filter by created_at to date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20)' })
   @ApiResponse({
     status: 200,
     description: 'List of announcements with pagination (excludes current user\'s announcements)',
@@ -258,7 +265,23 @@ export class AnnouncementsController {
       properties: {
         announcements: {
           type: 'array',
-          items: { type: 'object' },
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              type: { type: 'string', enum: ['sell', 'buy'] },
+              category: { type: 'string', enum: ['goods', 'rent', 'service'] },
+              group_id: { type: 'string', format: 'uuid' },
+              group: { type: 'object', description: 'GoodsCategory (name_am, name_en, name_ru)' },
+              item_id: { type: 'string', format: 'uuid' },
+              item: { type: 'object', description: 'GoodsItem (belongs to subgroup); name_am, name_en, name_ru, measurements' },
+              price: { type: 'number' },
+              status: { type: 'string', enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] },
+              owner: { type: 'object', properties: { id: { type: 'string' }, full_name: { type: 'string' } } },
+              regions_data: { type: 'array', description: 'Resolved region names' },
+              applications_count: { type: 'number' },
+            },
+          },
         },
         total: { type: 'number', description: 'Total number of announcements matching filters' },
         page: { type: 'number', description: 'Current page number' },
@@ -267,11 +290,15 @@ export class AnnouncementsController {
     },
   })
   async findAll(
-    @Query('category') category?: string,
+    @Query('category') category?: string | string[],
     @Query('type') type?: string,
     @Query('status') status?: string,
+    @Query('group_id') group_id?: string | string[],
+    @Query('subgroup_id') subgroup_id?: string | string[],
     @Query('region') region?: string | string[],
     @Query('village') village?: string | string[],
+    @Query('price_from') price_from?: string,
+    @Query('price_to') price_to?: string,
     @Query('created_from') created_from?: string,
     @Query('created_to') created_to?: string,
     @Query('page') page?: number,
@@ -288,38 +315,73 @@ export class AnnouncementsController {
       }
     }
 
-    // Normalize region and village to arrays
+    // Normalize to arrays (one or many)
+    const categories = Array.isArray(category) ? category : category ? [category] : undefined;
+    const groupIds = Array.isArray(group_id) ? group_id : group_id ? [group_id] : undefined;
+    const subgroupIds = Array.isArray(subgroup_id) ? subgroup_id : subgroup_id ? [subgroup_id] : undefined;
     const regions = Array.isArray(region) ? region : region ? [region] : undefined;
     const villages = Array.isArray(village) ? village : village ? [village] : undefined;
 
-    // Get current user ID if authenticated (optional)
+    // Validate category values if provided
+    if (categories && categories.length > 0) {
+      const validCategories = ['goods', 'rent', 'service'];
+      for (const c of categories) {
+        if (!validCategories.includes(c)) {
+          throw new BadRequestException(
+            `Invalid category value: "${c}". Valid values are: ${validCategories.join(', ')}`
+          );
+        }
+      }
+    }
+
     const currentUserId = req?.user?.id;
 
+    const priceFromNum = price_from !== undefined && price_from !== '' ? Number(price_from) : undefined;
+    const priceToNum = price_to !== undefined && price_to !== '' ? Number(price_to) : undefined;
+    if (priceFromNum !== undefined && (Number.isNaN(priceFromNum) || priceFromNum < 0)) {
+      throw new BadRequestException('price_from must be a non-negative number');
+    }
+    if (priceToNum !== undefined && (Number.isNaN(priceToNum) || priceToNum < 0)) {
+      throw new BadRequestException('price_to must be a non-negative number');
+    }
+
     return this.announcementsService.findAll({
-      category,
+      category: categories,
       type,
       status: status as AnnouncementStatus | undefined,
+      group_id: groupIds,
+      subgroup_id: subgroupIds,
       regions,
       villages,
+      price_from: priceFromNum,
+      price_to: priceToNum,
       created_from,
       created_to,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
-      excludeOwnerId: currentUserId, // Exclude current user's announcements
+      excludeOwnerId: currentUserId,
     });
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get current user\'s announcements with filters and pagination' })
+  @ApiOperation({
+    summary: 'Get current user\'s announcements with filters and pagination',
+    description: 'Returns announcements owned by the current user. Filters: status, category, group, subgroup, region, village, price range (price_from, price_to), date range.',
+  })
   @ApiQuery({ name: 'status', required: false, enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] })
+  @ApiQuery({ name: 'category', required: false, enum: ['goods', 'rent', 'service'], isArray: true, description: 'Filter by category (repeat for multiple)' })
+  @ApiQuery({ name: 'group_id', required: false, isArray: true, description: 'Filter by group — GoodsCategory UUID(s); repeat for multiple' })
+  @ApiQuery({ name: 'subgroup_id', required: false, isArray: true, description: 'Filter by subgroup — GoodsSubcategory UUID(s); repeat for multiple' })
   @ApiQuery({ name: 'region', required: false, description: 'Region UUID (can be multiple: ?region=uuid1&region=uuid2)' })
   @ApiQuery({ name: 'village', required: false, description: 'Village UUID (can be multiple: ?village=uuid1&village=uuid2)' })
+  @ApiQuery({ name: 'price_from', required: false, description: 'Minimum price (inclusive)' })
+  @ApiQuery({ name: 'price_to', required: false, description: 'Maximum price (inclusive)' })
   @ApiQuery({ name: 'created_from', required: false, description: 'Filter by created_at from date (YYYY-MM-DD)' })
   @ApiQuery({ name: 'created_to', required: false, description: 'Filter by created_at to date (YYYY-MM-DD)' })
-  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default: 1)' })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default: 20, max: 100)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (default: 20, max: 100)' })
   @ApiResponse({
     status: 200,
     description: 'Paginated list of user\'s announcements with filters applied',
@@ -328,7 +390,23 @@ export class AnnouncementsController {
       properties: {
         announcements: {
           type: 'array',
-          items: { type: 'object' },
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              type: { type: 'string', enum: ['sell', 'buy'] },
+              category: { type: 'string', enum: ['goods', 'rent', 'service'] },
+              group_id: { type: 'string', format: 'uuid' },
+              group: { type: 'object', description: 'GoodsCategory (group)' },
+              item_id: { type: 'string', format: 'uuid' },
+              item: { type: 'object', description: 'GoodsItem (subgroup via item.subcategory)' },
+              price: { type: 'number' },
+              status: { type: 'string', enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] },
+              owner: { type: 'object' },
+              regions_data: { type: 'array' },
+              applications_count: { type: 'number' },
+            },
+          },
         },
         total: { type: 'number', description: 'Total number of announcements matching filters' },
         page: { type: 'number', description: 'Current page number' },
@@ -339,18 +417,35 @@ export class AnnouncementsController {
   async findMyAnnouncements(
     @Request() req,
     @Query('status') status?: string,
+    @Query('category') category?: string | string[],
+    @Query('group_id') group_id?: string | string[],
+    @Query('subgroup_id') subgroup_id?: string | string[],
     @Query('region') region?: string | string[],
     @Query('village') village?: string | string[],
+    @Query('price_from') price_from?: string,
+    @Query('price_to') price_to?: string,
     @Query('created_from') created_from?: string,
     @Query('created_to') created_to?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
   ) {
-    // Normalize region and village to arrays
+    const categories = Array.isArray(category) ? category : category ? [category] : undefined;
+    const groupIds = Array.isArray(group_id) ? group_id : group_id ? [group_id] : undefined;
+    const subgroupIds = Array.isArray(subgroup_id) ? subgroup_id : subgroup_id ? [subgroup_id] : undefined;
     const regions = Array.isArray(region) ? region : region ? [region] : undefined;
     const villages = Array.isArray(village) ? village : village ? [village] : undefined;
 
-    // Validate status enum if provided
+    if (categories && categories.length > 0) {
+      const validCategories = ['goods', 'rent', 'service'];
+      for (const c of categories) {
+        if (!validCategories.includes(c)) {
+          throw new BadRequestException(
+            `Invalid category value: "${c}". Valid values are: ${validCategories.join(', ')}`
+          );
+        }
+      }
+    }
+
     if (status) {
       const validStatuses = Object.values(AnnouncementStatus);
       if (!validStatuses.includes(status as AnnouncementStatus)) {
@@ -360,7 +455,6 @@ export class AnnouncementsController {
       }
     }
 
-    // Validate and normalize pagination parameters
     const pageNum = page ? Number(page) : 1;
     const limitNum = limit ? Number(limit) : 20;
     
@@ -372,10 +466,24 @@ export class AnnouncementsController {
       throw new BadRequestException('Limit must be between 1 and 100');
     }
 
+    const priceFromNum = price_from !== undefined && price_from !== '' ? Number(price_from) : undefined;
+    const priceToNum = price_to !== undefined && price_to !== '' ? Number(price_to) : undefined;
+    if (priceFromNum !== undefined && (Number.isNaN(priceFromNum) || priceFromNum < 0)) {
+      throw new BadRequestException('price_from must be a non-negative number');
+    }
+    if (priceToNum !== undefined && (Number.isNaN(priceToNum) || priceToNum < 0)) {
+      throw new BadRequestException('price_to must be a non-negative number');
+    }
+
     return this.announcementsService.findUserAnnouncements(req.user.id, {
       status: status as AnnouncementStatus | undefined,
+      category: categories,
+      group_id: groupIds,
+      subgroup_id: subgroupIds,
       regions,
       villages,
+      price_from: priceFromNum,
+      price_to: priceToNum,
       created_from,
       created_to,
       page: pageNum,
@@ -385,17 +493,36 @@ export class AnnouncementsController {
 
   @Get('search')
   @UseGuards(OptionalJwtAuthGuard)
-  @ApiOperation({ summary: 'Search announcements by text (name/description in item, group, description)' })
+  @ApiOperation({
+    summary: 'Search announcements by text',
+    description: 'Search by phrase in description and item/group names. Returns paginated results; each announcement includes group (GoodsCategory) and item (GoodsItem, subgroup via item.subcategory).',
+  })
   @ApiQuery({ name: 'q', required: true, description: 'Search phrase (matches description and item/group names)' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Max 50' })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', default: 1 } })
+  @ApiQuery({ name: 'limit', required: false, schema: { type: 'integer', default: 20, maximum: 50 }, description: 'Max 50' })
   @ApiResponse({
     status: 200,
-    description: 'Paginated search results (slim payload, no applications/regions)',
+    description: 'Paginated search results; each item includes group and item (subgroup)',
     schema: {
       type: 'object',
       properties: {
-        announcements: { type: 'array', items: { type: 'object' } },
+        announcements: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              group_id: { type: 'string', format: 'uuid' },
+              group: { type: 'object', description: 'GoodsCategory (group)' },
+              item_id: { type: 'string', format: 'uuid' },
+              item: { type: 'object', description: 'GoodsItem (subgroup)' },
+              price: { type: 'number' },
+              type: { type: 'string' },
+              category: { type: 'string' },
+              status: { type: 'string' },
+            },
+          },
+        },
         total: { type: 'number' },
         page: { type: 'number' },
         limit: { type: 'number' },
@@ -451,10 +578,35 @@ export class AnnouncementsController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get announcement by ID' })
+  @ApiOperation({
+    summary: 'Get announcement by ID',
+    description: 'Returns full announcement with owner, group (GoodsCategory), and item (GoodsItem; item belongs to a subgroup).',
+  })
   @ApiResponse({
     status: 200,
-    description: 'Announcement details with relations (owner, group, item)',
+    description: 'Announcement details with relations (owner, group, item with subgroup)',
+    schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', format: 'uuid' },
+        type: { type: 'string', enum: ['sell', 'buy'] },
+        category: { type: 'string', enum: ['goods', 'rent', 'service'] },
+        group_id: { type: 'string', format: 'uuid' },
+        group: { type: 'object', description: 'GoodsCategory (group)' },
+        item_id: { type: 'string', format: 'uuid' },
+        item: { type: 'object', description: 'GoodsItem (subgroup via item.subcategory)' },
+        price: { type: 'number' },
+        status: { type: 'string', enum: ['pending', 'published', 'closed', 'canceled', 'blocked'] },
+        owner: { type: 'object' },
+        regions_data: { type: 'array' },
+        villages_data: { type: 'array' },
+        applications: { type: 'array' },
+        images: { type: 'array', items: { type: 'string' } },
+        description: { type: 'string' },
+        created_at: { type: 'string', format: 'date-time' },
+        updated_at: { type: 'string', format: 'date-time' },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Invalid announcement ID (must be a valid UUID)' })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
