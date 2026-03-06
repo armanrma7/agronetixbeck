@@ -317,24 +317,11 @@ export class AnnouncementsService {
   }
 
   /**
-   * Determine initial status: only goods can be auto-published (when no description/images).
-   * Rent and service always start as PENDING (require admin verification).
+   * All announcements are created with status PENDING.
+   * Only admin can publish; owner or admin can close; owner can cancel.
    */
-  private determineInitialStatus(
-    category: AnnouncementCategory,
-    description?: string,
-    images?: string[]
-  ): AnnouncementStatus {
-    // Rent and service always pending until admin publishes
-    if (category === AnnouncementCategory.RENT || category === AnnouncementCategory.SERVICE) {
-      return AnnouncementStatus.PENDING;
-    }
-    // Goods: if description or images exist, needs verification
-    if (description || (images && images.length > 0)) {
-      return AnnouncementStatus.PENDING;
-    }
-    // Goods only: auto-publish when no description or images
-    return AnnouncementStatus.PUBLISHED;
+  private determineInitialStatus(): AnnouncementStatus {
+    return AnnouncementStatus.PENDING;
   }
 
   /**
@@ -428,8 +415,8 @@ export class AnnouncementsService {
       throw new BadRequestException(`Item with ID ${createDto.item_id} not found`);
     }
 
-    // Determine initial status (only goods can be auto-published; rent/service always pending)
-    const status = this.determineInitialStatus(createDto.category, createDto.description, createDto.images);
+    // All announcement types start as PENDING; only admin (or dedicated endpoints) can change status
+    const status = this.determineInitialStatus();
 
     // Expiry date: use end date (date_to) when present, otherwise default expiry days if configured
     let expiryDate: Date | null = null;
