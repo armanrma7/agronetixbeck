@@ -11,6 +11,7 @@ import { ApplicationsModule } from './applications/applications.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { DeviceTokensModule } from './device-tokens/device-tokens.module';
+import { MessagesModule } from './messages/messages.module';
 import { User } from './entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
 import { Region } from './entities/region.entity';
@@ -72,6 +73,7 @@ import { Notification } from './entities/notification.entity';
     CatalogModule,
     NotificationsModule,
     DeviceTokensModule,
+    MessagesModule,
     AnnouncementsModule,
     ApplicationsModule,
     FavoritesModule,

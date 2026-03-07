@@ -1,76 +1,592 @@
 {
   "categories": [
     {
-      "type": "service",
-      "key": "technical_maintenance",
+      "type": "rent",
+      "key": "land_buildings",
       "name": {
-        "hy": "Տեխնիկական սպասարկում",
-        "en": "Technical Maintenance",
-        "ru": "Техническое обслуживание"
+        "hy": "Հող և շինություններ",
+        "en": "Land & Buildings",
+        "ru": "Земля и сооружения"
       },
       "subcategories": [
         {
-          "key": "technical_maintenance",
+          "key": "land_plots",
           "name": {
-            "hy": "Տեխնիկական սպասարկում",
-            "en": "Technical Maintenance",
-            "ru": "Техническое обслуживание"
+            "hy": "Հողատարածքներ",
+            "en": "Land Plots",
+            "ru": "Земельные участки"
           },
           "items": [
             {
-              "key": "agricultural_machinery_repair",
+              "key": "orchard",
               "name": {
-                "hy": "Գյուղտեխնիկայի վերանորոգում",
-                "en": "Agricultural machinery repair",
-                "ru": "Ремонт сельхозтехники"
+                "hy": "Այգի",
+                "en": "Orchard",
+                "ru": "Сад"
               },
               "measurements": [
-                { "hy": "օր", "en": "d", "ru": "дн" },
-                { "hy": "ժ", "en": "hr", "ru": "ч" },
-                { "hy": "ամ", "en": "mo", "ru": "мс" },
-                { "hy": "հատ", "en": "un", "ru": "шт" }
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
               ]
             },
             {
-              "key": "irrigation_system_installation",
+              "key": "pasture",
               "name": {
-                "hy": "Ոռոգման համակարգերի տեղադրում",
-                "en": "Irrigation system installation",
-                "ru": "Установка систем орошения"
+                "hy": "Արոտավայր",
+                "en": "Pasture",
+                "ru": "Пастбище"
               },
               "measurements": [
-                { "hy": "օր", "en": "d", "ru": "дн" },
-                { "hy": "ժ", "en": "hr", "ru": "ч" },
-                { "hy": "ամ", "en": "mo", "ru": "мс" },
-                { "hy": "հատ", "en": "un", "ru": "шт" }
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
               ]
             },
             {
-              "key": "greenhouse_maintenance",
+              "key": "agricultural_land",
               "name": {
-                "hy": "Ջերմոցների սպասարկում",
-                "en": "Greenhouse maintenance",
-                "ru": "Обслуживание теплиц"
+                "hy": "Գյուղնշանակության հողատարածք",
+                "en": "Agricultural land",
+                "ru": "Сельскохозяйственный участок"
               },
               "measurements": [
-                { "hy": "օր", "en": "d", "ru": "дн" },
-                { "hy": "ժ", "en": "hr", "ru": "ч" },
-                { "hy": "ամ", "en": "mo", "ru": "мс" },
-                { "hy": "հատ", "en": "un", "ru": "шт" }
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
               ]
             },
             {
-              "key": "cold_storage_maintenance",
+              "key": "vineyard",
               "name": {
-                "hy": "Սառնարանների սպասարկում",
-                "en": "Cold storage maintenance",
-                "ru": "Обслуживание холодильников"
+                "hy": "Խաղողի այգի",
+                "en": "Vineyard",
+                "ru": "Виноградник"
               },
               "measurements": [
-                { "hy": "օր", "en": "d", "ru": "дн" },
-                { "hy": "ժ", "en": "hr", "ru": "ч" },
-                { "hy": "ամ", "en": "mo", "ru": "мс" },
-                { "hy": "հատ", "en": "un", "ru": "шт" }
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "hayfield",
+              "name": {
+                "hy": "Խոտհարք",
+                "en": "Hayfield",
+                "ru": "Сенокос"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "greenhouse_land",
+              "name": {
+                "hy": "Ջերմոցային հողատարածք",
+                "en": "Greenhouse land",
+                "ru": "Тепличный участок"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "household_land_plot",
+              "name": {
+                "hy": "Տնամերձ հողատարածք",
+                "en": "Household land plot",
+                "ru": "Приусадебный участок"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "հեկտ",
+                  "en": "ha",
+                  "ru": "га"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "buildings",
+          "name": {
+            "hy": "Շինություններ",
+            "en": "Buildings",
+            "ru": "Здания и сооружения"
+          },
+          "items": [
+            {
+              "key": "warehouse",
+              "name": {
+                "hy": "Պահեստ",
+                "en": "Warehouse",
+                "ru": "Склад"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "barn",
+              "name": {
+                "hy": "Անասնագոմ",
+                "en": "Barn",
+                "ru": "Хлев"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "greenhouse",
+              "name": {
+                "hy": "Ջերմոց",
+                "en": "Greenhouse",
+                "ru": "Теплица"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "production_facility",
+              "name": {
+                "hy": "Արտադրական շինություն",
+                "en": "Production facility",
+                "ru": "Производственное помещение"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "cold_storage",
+              "name": {
+                "hy": "Սառնարան",
+                "en": "Cold storage",
+                "ru": "Холодильное помещение"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                },
+                {
+                  "hy": "կգ",
+                  "en": "kg",
+                  "ru": "кг"
+                },
+                {
+                  "hy": "տն",
+                  "en": "t",
+                  "ru": "т"
+                },
+                {
+                  "hy": "մ³",
+                  "en": "m³",
+                  "ru": "м³"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "poultry_house",
+              "name": {
+                "hy": "Թռչնանոց",
+                "en": "Poultry house",
+                "ru": "Птичник"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "drying_facility",
+              "name": {
+                "hy": "Չորանոց",
+                "en": "Drying facility",
+                "ru": "Сушильное помещение"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "milk_processing_facility",
+              "name": {
+                "hy": "Կաթի վերամշակման շինություն",
+                "en": "Milk processing facility",
+                "ru": "Помещение переработки молока"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "fruit_drying_facility",
+              "name": {
+                "hy": "Չրանոց",
+                "en": "Fruit drying facility",
+                "ru": "Сушилка для фруктов"
+              },
+              "measurements": [
+                {
+                  "hy": "մ²",
+                  "en": "m²",
+                  "ru": "м²"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
               ]
             }
           ]

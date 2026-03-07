@@ -18,6 +18,7 @@ import {
   AnnouncementType,
   AnnouncementCategory,
   Unit,
+  RentUnit,
 } from '../../entities/announcement.entity';
 
 export class CreateAnnouncementDto {
@@ -130,6 +131,12 @@ export class CreateAnnouncementDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'min_area must be > 0.' })
   min_area?: number;
+
+  // For category = 'rent': price per unit (optional; e.g. per hour, per day)
+  @ApiProperty({ enum: RentUnit, required: false, description: 'Rent price unit (hour, day, week, month, year)' })
+  @IsOptional()
+  @IsEnum(RentUnit, { message: 'rent_unit must be one of: hour, day, week, month, year.' })
+  rent_unit?: RentUnit;
 
   // ====================================
   // LOCATION FIELDS

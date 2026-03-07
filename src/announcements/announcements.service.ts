@@ -14,6 +14,7 @@ import {
   AnnouncementCategory,
   AnnouncementType,
   Unit,
+  RentUnit,
 } from '../entities/announcement.entity';
 import { User, UserType } from '../entities/user.entity';
 import { GoodsCategory } from '../entities/goods-category.entity';
@@ -29,6 +30,7 @@ import { DeviceTokenService } from '../notifications/device-token.service';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationType } from '../entities/notification.entity';
 import { StorageService } from '../storage/storage.service';
+import { getMessage } from '../messages';
 
 @Injectable()
 export class AnnouncementsService {
@@ -453,6 +455,7 @@ export class AnnouncementsService {
       date_from: createDto.date_from ? this.parseDate(createDto.date_from) : null,
       date_to: createDto.date_to ? this.parseDate(createDto.date_to) : null,
       min_area: createDto.min_area || null,
+      rent_unit: createDto.rent_unit || null,
       regions: createDto.regions || [],
       villages: createDto.villages || [],
       available_quantity: createDto.category === AnnouncementCategory.GOODS ? (createDto.count || 0) : 0,
@@ -461,13 +464,30 @@ export class AnnouncementsService {
 
     const savedAnnouncement = await this.announcementRepository.save(announcement);
 
+    // Notify owner: created, awaiting verification (using centralized messages)
+    try {
+      await this.notificationService.create({
+        user_id: userId,
+        type: NotificationType.ANNOUNCEMENT_CREATED,
+        title: getMessage('announcements.createdVerificationNeeded', 'en'),
+        body: getMessage('announcements.createdVerificationNeeded', 'en'),
+        data: {
+          announcement_id: savedAnnouncement.id,
+          messageKey: 'announcements.createdVerificationNeeded',
+        },
+        sendPush: true,
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to send created notification for announcement ${savedAnnouncement.id}: ${error.message}`);
+    }
+
     // Load relations for response
     const fullAnnouncement = await this.findOne(savedAnnouncement.id);
 
     const message =
       status === AnnouncementStatus.PENDING
-        ? 'Your Announcement was successfully submitted for verification'
-        : 'Your Announcement is published and ready to receive applications';
+        ? getMessage('announcements.createdVerificationNeeded', 'en')
+        : getMessage('announcements.published', 'en');
 
     return { message, announcement: fullAnnouncement };
   }
@@ -1128,6 +1148,7 @@ export class AnnouncementsService {
             'announcement_type_enum': Object.values(AnnouncementType),
             'announcement_category_enum': Object.values(AnnouncementCategory),
             'announcement_unit_enum': Object.values(Unit),
+            'announcement_rent_unit_enum': Object.values(RentUnit),
           };
           
           const validValues = enumValueMap[enumName] || [];
@@ -1162,12 +1183,13 @@ export class AnnouncementsService {
       await this.notificationService.create({
         user_id: announcement.owner_id,
         type: NotificationType.ANNOUNCEMENT_PUBLISHED,
-        title: 'Announcement Published',
-        body: `Your announcement "${this.generateSummary(announcement)}" has been approved and published.`,
+        title: getMessage('announcements.publishedTitle', 'en'),
+        body: getMessage('announcements.published', 'en'),
         data: {
           announcement_id: announcement.id,
           announcement_type: announcement.type,
           announcement_category: announcement.category,
+          messageKey: 'announcements.published',
         },
         sendPush: true,
       });
@@ -1184,79 +1206,93 @@ export class AnnouncementsService {
   }
 
   /**
-   * Notify users in matching regions about a newly published announcement
-   * Excludes the announcement owner
+   * Notify users in matching regions and villages about a newly published announcement.
+   * Uses Firebase push tokens from Supabase. Excludes the announcement owner.
    */
   private async notifyUsersInRegions(announcement: Announcement): Promise<void> {
-    // Only notify if announcement has regions
-    if (!announcement.regions || announcement.regions.length === 0) {
-      this.logger.log(`Announcement ${announcement.id} has no regions, skipping region notifications`);
+    const hasRegions = announcement.regions && announcement.regions.length > 0;
+    const hasVillages = announcement.villages && announcement.villages.length > 0;
+    if (!hasRegions && !hasVillages) {
+      this.logger.log(`Announcement ${announcement.id} has no regions or villages, skipping notifications`);
       return;
     }
 
     try {
-      // Find users whose region_id matches any of the announcement's regions
-      // Exclude the announcement owner
-      const usersInRegions = await this.userRepository.find({
-        where: {
-          region_id: In(announcement.regions),
-          verified: true, // Only notify verified users
-          is_locked: false, // Don't notify locked users
-        },
-        select: ['id', 'full_name', 'region_id'],
-      });
+      const userIds = new Set<string>();
 
-      // Filter out the announcement owner
-      const usersToNotify = usersInRegions.filter(user => user.id !== announcement.owner_id);
+      if (hasRegions) {
+        const usersInRegions = await this.userRepository.find({
+          where: {
+            region_id: In(announcement.regions),
+            verified: true,
+            is_locked: false,
+          },
+          select: ['id'],
+        });
+        usersInRegions.forEach((u) => userIds.add(u.id));
+      }
+
+      if (hasVillages) {
+        const usersInVillages = await this.userRepository.find({
+          where: {
+            village_id: In(announcement.villages),
+            verified: true,
+            is_locked: false,
+          },
+          select: ['id'],
+        });
+        usersInVillages.forEach((u) => userIds.add(u.id));
+      }
+
+      userIds.delete(announcement.owner_id);
+      const usersToNotify = Array.from(userIds);
 
       if (usersToNotify.length === 0) {
-        this.logger.log(`No users found in regions ${announcement.regions.join(', ')} to notify`);
+        this.logger.log(`No users found in selected regions/villages to notify for announcement ${announcement.id}`);
         return;
       }
 
       this.logger.log(
-        `Notifying ${usersToNotify.length} user(s) in regions ${announcement.regions.join(', ')} about announcement ${announcement.id}`
+        `Notifying ${usersToNotify.length} user(s) in regions/villages about announcement ${announcement.id}`,
       );
 
-      // Generate announcement summary for notification
-      const itemName = announcement.item?.name_en || announcement.item?.name_am || 'item';
-      const categoryName = announcement.category === AnnouncementCategory.GOODS ? 'goods' :
-                          announcement.category === AnnouncementCategory.RENT ? 'rent' : 'service';
-      const typeName = announcement.type === AnnouncementType.SELL ? 'sell' : 'buy';
-
-      // Send notifications to all matching users
-      const notificationPromises = usersToNotify.map(user =>
-        this.notificationService.create({
-          user_id: user.id,
-          type: NotificationType.ANNOUNCEMENT_PUBLISHED,
-          title: 'New Announcement in Your Region',
-          body: `New ${typeName} ${categoryName} announcement: ${itemName} - ${announcement.price} AMD`,
-          data: {
-            announcement_id: announcement.id,
-            announcement_type: announcement.type,
-            announcement_category: announcement.category,
-            region_ids: announcement.regions,
-          },
-          sendPush: true,
-        }).catch(error => {
-          this.logger.warn(`Failed to notify user ${user.id} about announcement ${announcement.id}: ${error.message}`);
-          return null;
-        })
+      const title = getMessage('announcements.newInRegion', 'en');
+      const body = getMessage('announcements.newInRegionBody', 'en');
+      const notificationPromises = usersToNotify.map((userId) =>
+        this.notificationService
+          .create({
+            user_id: userId,
+            type: NotificationType.ANNOUNCEMENT_PUBLISHED,
+            title,
+            body,
+            data: {
+              announcement_id: announcement.id,
+              announcement_type: announcement.type,
+              announcement_category: announcement.category,
+              region_ids: announcement.regions,
+              village_ids: announcement.villages,
+              messageKey: 'announcements.newInRegion',
+              messageBodyKey: 'announcements.newInRegionBody',
+            },
+            sendPush: true,
+          })
+          .catch((error) => {
+            this.logger.warn(`Failed to notify user ${userId} about announcement ${announcement.id}: ${error.message}`);
+            return null;
+          }),
       );
 
       const results = await Promise.allSettled(notificationPromises);
-      const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== null).length;
+      const successCount = results.filter((r) => r.status === 'fulfilled' && r.value !== null).length;
       const failureCount = results.length - successCount;
-
       this.logger.log(
-        `Region notifications sent: ${successCount} successful, ${failureCount} failed for announcement ${announcement.id}`
+        `Region/village notifications sent: ${successCount} successful, ${failureCount} failed for announcement ${announcement.id}`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed to send region notifications for announcement ${announcement.id}: ${error.message}`,
-        error.stack
+        `Failed to send region/village notifications for announcement ${announcement.id}: ${error.message}`,
+        error.stack,
       );
-      // Don't throw - announcement is already published
     }
   }
 
@@ -1270,12 +1306,15 @@ export class AnnouncementsService {
     announcement.closed_by = adminId;
     await this.announcementRepository.save(announcement);
 
-    // Notify owner
+    // Notify owner (centralized messages)
     await this.sendNotificationToUser(
       announcement.owner_id,
-      'Announcement Blocked',
-      `Your announcement "${this.generateSummary(announcement)}" has been blocked by an administrator.`,
-      { announcementId: announcement.id }
+      getMessage('announcements.blockedTitle', 'en'),
+      getMessage('announcements.blocked', 'en'),
+      {
+        announcement_id: announcement.id,
+        messageKey: 'announcements.blocked',
+      },
     );
 
     // Return enriched announcement
@@ -1472,12 +1511,15 @@ export class AnnouncementsService {
         announcement.closed_by = null; // System closed
         await this.announcementRepository.save(announcement);
 
-        // Notify owner
+        // Notify owner (centralized messages)
         await this.sendNotificationToUser(
           announcement.owner_id,
-          'Rental Period Ended',
-          `Your rent announcement "${this.generateSummary(announcement)}" has been automatically closed as the rental period has ended.`,
-          { announcementId: announcement.id }
+          getMessage('announcements.expiredTitle', 'en'),
+          getMessage('announcements.rentalPeriodEnded', 'en'),
+          {
+            announcement_id: announcement.id,
+            messageKey: 'announcements.rentalPeriodEnded',
+          },
         );
 
         this.logger.log(`Auto-closed expired rent announcement: ${announcement.id}`);
@@ -1507,12 +1549,15 @@ export class AnnouncementsService {
       announcement.closed_by = null; // System closed
       await this.announcementRepository.save(announcement);
 
-      // Notify owner
+      // Notify owner (centralized messages)
       await this.sendNotificationToUser(
         announcement.owner_id,
-        'Announcement Expired',
-        `Your announcement "${this.generateSummary(announcement)}" has been automatically closed as it has reached its expiry date.`,
-        { announcementId: announcement.id }
+        getMessage('announcements.expiredTitle', 'en'),
+        getMessage('announcements.announcementExpired', 'en'),
+        {
+          announcement_id: announcement.id,
+          messageKey: 'announcements.announcementExpired',
+        },
       );
 
       this.logger.log(`Auto-closed expired announcement: ${announcement.id} (expiry_date: ${announcement.expiry_date})`);

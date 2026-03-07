@@ -43,6 +43,15 @@ export enum Unit {
   HA = 'ha',
 }
 
+/** For category = 'rent': price per unit (optional; e.g. per hour, per day) */
+export enum RentUnit {
+  HOUR = 'hour',
+  DAY = 'day',
+  WEEK = 'week',
+  MONTH = 'month',
+  YEAR = 'year',
+}
+
 @Entity('announcements')
 export class Announcement {
   @PrimaryGeneratedColumn('uuid')
@@ -145,6 +154,14 @@ export class Announcement {
   // min_area is optional (typically for rent category)
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   min_area: number | null;
+
+  // For category = 'rent': price per unit (e.g. per day, per hectare)
+  @Column({
+    type: 'enum',
+    enum: RentUnit,
+    nullable: true,
+  })
+  rent_unit: RentUnit | null;
 
   // ====================================
   // LOCATION FIELDS

@@ -12,7 +12,7 @@ import {
   IsDateString,
   ArrayMinSize,
 } from 'class-validator';
-import { Unit, AnnouncementStatus } from '../../entities/announcement.entity';
+import { Unit, RentUnit, AnnouncementStatus } from '../../entities/announcement.entity';
 
 export class UpdateAnnouncementDto {
   @ApiProperty({ required: false, minimum: 0, example: 1500.00 })
@@ -70,6 +70,11 @@ export class UpdateAnnouncementDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'min_area must be > 0.' })
   min_area?: number;
+
+  @ApiProperty({ enum: RentUnit, required: false, description: 'Rent price unit (hour, day, week, month, year)' })
+  @IsOptional()
+  @IsEnum(RentUnit, { message: 'rent_unit must be one of: hour, day, week, month, year.' })
+  rent_unit?: RentUnit;
 
   // Location
   @ApiProperty({ type: [String], required: false })

@@ -15,6 +15,7 @@ import { UpdateApplicationDto } from './dto/update-application.dto';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationType } from '../entities/notification.entity';
 import { AnnouncementsService } from '../announcements/announcements.service';
+import { getMessage } from '../messages';
 
 /**
  * Notification rules:
@@ -108,6 +109,7 @@ export class ApplicationsService {
         ApplicationStatus.APPROVED,
         ApplicationStatus.REJECTED,
         ApplicationStatus.CLOSED,
+        ApplicationStatus.CANCELED,
       ];
       if (!allowedTransitions.includes(newStatus)) {
         throw new BadRequestException(
@@ -117,11 +119,12 @@ export class ApplicationsService {
       return;
     }
 
-    // Validate transitions from approved
+    // Validate transitions from approved (announcement owner can reject or close/cancel)
     if (currentStatus === ApplicationStatus.APPROVED) {
-      if (newStatus !== ApplicationStatus.CLOSED) {
+      const allowed = [ApplicationStatus.CLOSED, ApplicationStatus.CANCELED, ApplicationStatus.REJECTED];
+      if (!allowed.includes(newStatus)) {
         throw new BadRequestException(
-          `Cannot transition from ${currentStatus} to ${newStatus}. Only allowed transition: ${ApplicationStatus.CLOSED}`,
+          `Cannot transition from ${currentStatus} to ${newStatus}. Allowed: ${allowed.join(', ')}`,
         );
       }
       return;
@@ -202,10 +205,10 @@ export class ApplicationsService {
         throw new BadRequestException('Count is required and must be greater than 0 for goods announcements');
       }
       
-      // Check available quantity from database (for goods category)
-      const availableQuantity = announcement.available_quantity || 0;
-      
-      if (createDto.count > availableQuantity) {
+      // Check available quantity (coerce to number: DB decimal can return string)
+      const availableQuantity = Number(announcement.available_quantity) || 0;
+      const requestedCount = Number(createDto.count) || 0;
+      if (requestedCount > availableQuantity) {
         throw new BadRequestException(
           `Count cannot exceed available amount (${availableQuantity})`
         );
@@ -239,14 +242,15 @@ export class ApplicationsService {
     try {
       const itemName = announcement.item?.name_en || announcement.item?.name_am || 'announcement';
       await this.notificationService.create({
-        user_id: announcement.owner_id, // only announcement owner
+        user_id: announcement.owner_id,
         type: NotificationType.APPLICATION_CREATED,
-        title: 'New Application',
+        title: getMessage('applications.newApplication', 'en'),
         body: `${applicant.full_name} applied to your announcement "${itemName}"`,
         data: {
           announcement_id: announcementId,
           application_id: savedApplication.id,
           applicant_name: applicant.full_name,
+          messageKey: 'applications.newApplication',
         },
         sendPush: true,
       });
@@ -331,12 +335,13 @@ export class ApplicationsService {
     if (updateDto.count !== undefined) {
       if (announcement.category === AnnouncementCategory.GOODS) {
         const availableQuantity = Number(announcement.available_quantity ?? 0);
-        if (updateDto.count > availableQuantity) {
+        const requestedCount = Number(updateDto.count);
+        if (requestedCount > availableQuantity) {
           throw new BadRequestException(
             `Count cannot exceed available quantity (${availableQuantity})`,
           );
         }
-        application.count = updateDto.count;
+        application.count = requestedCount;
       } else {
         application.count = null;
       }
@@ -507,9 +512,10 @@ export class ApplicationsService {
     this.validateStatusTransition(application.status, ApplicationStatus.APPROVED);
 
     // Check available quantity from database (for goods category)
+    // Coerce to number: TypeORM/Postgres decimal columns can return strings
     if (announcement.category === AnnouncementCategory.GOODS) {
-      const availableQuantity = announcement.available_quantity || 0;
-      const requestedCount = application.count || 0;
+      const availableQuantity = Number(announcement.available_quantity) || 0;
+      const requestedCount = Number(application.count) || 0;
 
       if (requestedCount > availableQuantity) {
         throw new BadRequestException(
@@ -532,13 +538,14 @@ export class ApplicationsService {
       });
       const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
       await this.notificationService.create({
-        user_id: application.applicant_id, // only the user who applied
+        user_id: application.applicant_id,
         type: NotificationType.APPLICATION_APPROVED,
-        title: 'Application Approved',
+        title: getMessage('applications.applicationApproved', 'en'),
         body: `Your application to "${itemName}" has been approved.`,
         data: {
           announcement_id: announcementId,
           application_id: applicationId,
+          messageKey: 'applications.applicationApproved',
         },
         sendPush: true,
       });
@@ -564,7 +571,7 @@ export class ApplicationsService {
     }
 
     if (announcement.owner_id !== userId) {
-      throw new ForbiddenException('You can only reject applications for your own announcements');
+      throw new ForbiddenException('Only the announcement owner can reject this application');
     }
 
     const application = await this.applicationRepository.findOne({
@@ -591,13 +598,14 @@ export class ApplicationsService {
       });
       const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
       await this.notificationService.create({
-        user_id: application.applicant_id, // only the user who applied
+        user_id: application.applicant_id,
         type: NotificationType.APPLICATION_REJECTED,
-        title: 'Application Rejected',
+        title: getMessage('applications.applicationRejected', 'en'),
         body: `Your application to "${itemName}" has been rejected.`,
         data: {
           announcement_id: announcementId,
           application_id: applicationId,
+          messageKey: 'applications.applicationRejected',
         },
         sendPush: true,
       });
@@ -652,13 +660,14 @@ export class ApplicationsService {
         });
         const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
         await this.notificationService.create({
-          user_id: application.applicant_id, // only the user who applied
+          user_id: application.applicant_id,
           type: NotificationType.APPLICATION_CLOSED,
-          title: 'Application Closed',
+          title: getMessage('applications.applicationClosed', 'en'),
           body: `Your application to "${itemName}" has been closed.`,
           data: {
             announcement_id: announcementId,
             application_id: applicationId,
+            messageKey: 'applications.applicationClosed',
           },
           sendPush: true,
         });
@@ -719,6 +728,50 @@ export class ApplicationsService {
     }
 
     throw new ForbiddenException('Only the announcement owner or the application owner can close this application');
+  }
+
+  /**
+   * Cancel application. Only the application owner (applicant) can cancel.
+   * Allowed when status is PENDING or APPROVED. Sets status to CANCELED.
+   */
+  async cancel(applicationId: string, userId: string): Promise<Application> {
+    const application = await this.applicationRepository.findOne({
+      where: { id: applicationId },
+      relations: ['announcement', 'announcement.item'],
+    });
+    if (!application) {
+      throw new NotFoundException('Application not found');
+    }
+    if (application.applicant_id !== userId) {
+      throw new ForbiddenException('Only the application owner can cancel this application');
+    }
+    this.validateStatusTransition(application.status, ApplicationStatus.CANCELED);
+    application.status = ApplicationStatus.CANCELED;
+    const updated = await this.applicationRepository.save(application);
+
+    try {
+      const itemName =
+        application.announcement?.item?.name_en ||
+        application.announcement?.item?.name_am ||
+        'announcement';
+      await this.notificationService.create({
+        user_id: application.applicant_id,
+        type: NotificationType.APPLICATION_CANCELED,
+        title: getMessage('applications.applicationCanceled', 'en'),
+        body: getMessage('applications.applicationCanceledBody', 'en'),
+        data: {
+          announcement_id: application.announcement_id,
+          application_id: applicationId,
+          messageKey: 'applications.applicationCanceled',
+        },
+        sendPush: true,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send application canceled notification:', error);
+    }
+
+    this.logger.log(`Application ${applicationId} canceled by applicant`);
+    return updated;
   }
 }
 

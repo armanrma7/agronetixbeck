@@ -12,7 +12,7 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -264,12 +264,12 @@ export class ApplicationsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reject application (announcer only)' })
+  @ApiOperation({ summary: 'Reject application (announcement owner only)' })
   @ApiResponse({
     status: 200,
     description: 'Application rejected successfully',
   })
-  @ApiResponse({ status: 403, description: 'Not the announcer' })
+  @ApiResponse({ status: 403, description: 'Only the announcement owner can reject' })
   async reject(
     @Param('id') applicationId: string,
     @Request() req,
@@ -277,6 +277,42 @@ export class ApplicationsController {
     const application = await this.applicationsService.findOne(applicationId);
     await this.applicationsService.reject(application.announcement_id, applicationId, req.user.id);
     return { message: 'Application rejected successfully' };
+  }
+
+  @Post(':id/cancel')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({ name: 'id', description: 'Application UUID', type: String })
+  @ApiOperation({
+    summary: 'Cancel application (applicant only)',
+    description:
+      'The applicant (application owner) can cancel their own application when status is PENDING or APPROVED. ' +
+      'Sets application status to CANCELED.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Application canceled successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Application canceled successfully' },
+        application: { type: 'object', description: 'Updated application' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cancel not allowed for current status (e.g. already closed/rejected)',
+  })
+  @ApiResponse({ status: 403, description: 'Only the application owner can cancel' })
+  @ApiResponse({ status: 404, description: 'Application not found' })
+  async cancel(
+    @Param('id') applicationId: string,
+    @Request() req,
+  ) {
+    const application = await this.applicationsService.cancel(applicationId, req.user.id);
+    return { message: 'Application canceled successfully', application };
   }
 
   @Post(':id/close')

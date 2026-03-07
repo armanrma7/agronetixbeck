@@ -105,6 +105,7 @@ export class AnnouncementsController {
         date_from: { type: 'string', format: 'date' },
         date_to: { type: 'string', format: 'date' },
         min_area: { type: 'number' },
+        rent_unit: { type: 'string', enum: ['hour', 'day', 'week', 'month', 'year'], description: 'Optional. Rent price unit (for category=rent)' },
         regions: {
           type: 'array',
           items: { 
@@ -636,6 +637,7 @@ export class AnnouncementsController {
         date_from: { type: 'string', format: 'date' },
         date_to: { type: 'string', format: 'date' },
         min_area: { type: 'number' },
+        rent_unit: { type: 'string', enum: ['hour', 'day', 'week', 'month', 'year'], description: 'Optional. Rent price unit (for category=rent)' },
         expiry_date: { type: 'string', format: 'date' },
         regions: {
           type: 'array',
