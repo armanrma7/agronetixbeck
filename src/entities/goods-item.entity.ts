@@ -43,6 +43,10 @@ export class GoodsItem {
   @Column({ type: 'jsonb', nullable: true })
   measurements: Array<{ hy: string; en: string; ru: string }> | null;
 
+  /** Rent-specific measurement options (e.g. per day, per month). Same shape as measurements. */
+  @Column({ type: 'jsonb', nullable: true })
+  rent_measurements: Array<{ hy: string; en: string; ru: string }> | null;
+
   @CreateDateColumn()
   created_at: Date;
 

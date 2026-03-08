@@ -162,45 +162,47 @@ async function insertItem(subcategoryId, itemData) {
   // Get key from itemData or generate from English name
   const key = itemData.key || name_en.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
-  // Handle measurements - array of objects with hy/en/ru
-  let measurements = null;
-  
-  if (itemData.measurements && Array.isArray(itemData.measurements) && itemData.measurements.length > 0) {
-    // Convert array of measurement objects to proper format
-    // Input: [{hy: "կգ", en: "kg", ru: "кг"}, ...]
-    // Output: [{hy: "կգ", en: "kg", ru: "кг"}, ...] (same format, but ensure all fields exist)
-    measurements = itemData.measurements.map(meas => ({
+  // Helper: normalize measurement array (hy/en/ru)
+  function normalizeMeasurements(arr) {
+    if (!arr || !Array.isArray(arr) || arr.length === 0) return null;
+    const out = arr.map(meas => ({
       hy: (meas.hy || meas.am || '').trim() || null,
       en: (meas.en || '').trim() || null,
       ru: (meas.ru || '').trim() || null,
-    })).filter(meas => meas.hy || meas.en || meas.ru); // Remove empty measurements
-    
-    // If all measurements were filtered out, set to null
-    if (measurements.length === 0) {
-      measurements = null;
-    }
+    })).filter(meas => meas.hy || meas.en || meas.ru);
+    return out.length === 0 ? null : out;
   }
+
+  let measurements = normalizeMeasurements(itemData.measurements);
+  let rent_measurements = normalizeMeasurements(itemData.rent_measurements);
 
   // Check if item already exists
   const { data: existingItem } = await supabase
     .from('catalog_items')
-    .select('id, measurements')
+    .select('id, measurements, rent_measurements')
     .eq('subcategory_id', subcategoryId)
     .eq('key', key)
     .single();
 
   if (existingItem) {
-    // Update existing item with measurements if provided and different
-    if (measurements) {
+    const updates = {};
+    if (measurements != null) {
       const existingMeasurements = existingItem.measurements || [];
-      const needsUpdate = JSON.stringify(existingMeasurements) !== JSON.stringify(measurements);
-      
-      if (needsUpdate) {
-        await supabase
-          .from('catalog_items')
-          .update({ measurements: measurements })
-          .eq('id', existingItem.id);
+      if (JSON.stringify(existingMeasurements) !== JSON.stringify(measurements)) {
+        updates.measurements = measurements;
       }
+    }
+    if (rent_measurements != null) {
+      const existingRent = existingItem.rent_measurements || [];
+      if (JSON.stringify(existingRent) !== JSON.stringify(rent_measurements)) {
+        updates.rent_measurements = rent_measurements;
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await supabase
+        .from('catalog_items')
+        .update(updates)
+        .eq('id', existingItem.id);
     }
     return existingItem.id;
   }
@@ -212,11 +214,8 @@ async function insertItem(subcategoryId, itemData) {
     name_en: name_en,
     name_ru: name_ru,
   };
-  
-  // Include measurements if they exist
-  if (measurements) {
-    insertData.measurements = measurements;
-  }
+  if (measurements) insertData.measurements = measurements;
+  if (rent_measurements) insertData.rent_measurements = rent_measurements;
 
   const { data, error } = await supabase
     .from('catalog_items')

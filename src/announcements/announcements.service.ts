@@ -264,6 +264,20 @@ export class AnnouncementsService {
     return date;
   }
 
+  /** Only allow valid Unit enum values; invalid or unknown (e.g. "unit") become null. */
+  private normalizeUnit(value: unknown): Unit | null {
+    if (value == null || value === '') return null;
+    const s = String(value).toLowerCase().trim();
+    return Object.values(Unit).includes(s as Unit) ? (s as Unit) : null;
+  }
+
+  /** Only allow valid RentUnit enum values; invalid become null. */
+  private normalizeRentUnit(value: unknown): RentUnit | null {
+    if (value == null || value === '') return null;
+    const s = String(value).toLowerCase().trim();
+    return Object.values(RentUnit).includes(s as RentUnit) ? (s as RentUnit) : null;
+  }
+
   /**
    * Check if user can create announcements
    */
@@ -297,22 +311,11 @@ export class AnnouncementsService {
       }
     }
 
-    if (dto.category === AnnouncementCategory.RENT) {
-      if (!dto.date_from || !dto.date_from.trim()) {
-        throw new BadRequestException('date_from is required for rent category');
-      }
-      if (!dto.date_to || !dto.date_to.trim()) {
-        throw new BadRequestException('date_to is required for rent category');
-      }
-      
+    // date_from / date_to are optional for all categories; when both provided, validate order
+    if (dto.date_from?.trim() && dto.date_to?.trim()) {
       const dateFrom = this.parseDate(dto.date_from);
       const dateTo = this.parseDate(dto.date_to);
-      
-      if (!dateFrom || !dateTo) {
-        throw new BadRequestException('Both date_from and date_to are required for rent category');
-      }
-      
-      if (dateFrom >= dateTo) {
+      if (dateFrom && dateTo && dateFrom >= dateTo) {
         throw new BadRequestException('date_from must be before date_to');
       }
     }
@@ -449,13 +452,13 @@ export class AnnouncementsService {
       count: createDto.category === AnnouncementCategory.GOODS ? createDto.count : null,
       // For goods: daily_limit optional, others: NULL
       daily_limit: createDto.category === AnnouncementCategory.GOODS ? (createDto.daily_limit || null) : null,
-      unit: createDto.unit || null,
+      unit: this.normalizeUnit(createDto.unit),
       images: createDto.images || [],
-      // date_from / date_to: use when provided (required for rent, optional for others)
+      // date_from / date_to: optional for all announcement types
       date_from: createDto.date_from ? this.parseDate(createDto.date_from) : null,
       date_to: createDto.date_to ? this.parseDate(createDto.date_to) : null,
       min_area: createDto.min_area || null,
-      rent_unit: createDto.rent_unit || null,
+      rent_unit: this.normalizeRentUnit(createDto.rent_unit),
       regions: createDto.regions || [],
       villages: createDto.villages || [],
       available_quantity: createDto.category === AnnouncementCategory.GOODS ? (createDto.count || 0) : 0,
@@ -1107,6 +1110,14 @@ export class AnnouncementsService {
     
     // Remove status from update fields (should not be updated here)
     delete updatedFields.status;
+
+    // Normalize enum fields so invalid values (e.g. "unit") become null and never hit the DB
+    if (updateDto.unit !== undefined) {
+      updatedFields.unit = this.normalizeUnit(updateDto.unit);
+    }
+    if (updateDto.rent_unit !== undefined) {
+      updatedFields.rent_unit = this.normalizeRentUnit(updateDto.rent_unit);
+    }
     
     // Handle date fields safely
     if (updateDto.date_from !== undefined) {

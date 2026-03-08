@@ -2,38 +2,33 @@
   "categories": [
     {
       "type": "rent",
-      "key": "land_buildings",
+      "key": "machinery_tools_equipment",
       "name": {
-        "hy": "Հող և շինություններ",
-        "en": "Land & Buildings",
-        "ru": "Земля и сооружения"
+        "hy": "Տեխնիկա, գործիքներ և սարքավորումներ",
+        "en": "Machinery, Tools & Equipment",
+        "ru": "Техника, инструменты и оборудование"
       },
       "subcategories": [
         {
-          "key": "land_plots",
+          "key": "machinery_attachments",
           "name": {
-            "hy": "Հողատարածքներ",
-            "en": "Land Plots",
-            "ru": "Земельные участки"
+            "hy": "Տեխնիկա և կցորդներ",
+            "en": "Machinery & Attachments",
+            "ru": "Техника и навесное оборудование"
           },
           "items": [
             {
-              "key": "orchard",
+              "key": "tractor",
               "name": {
-                "hy": "Այգի",
-                "en": "Orchard",
-                "ru": "Сад"
+                "hy": "Տրակտոր",
+                "en": "Tractor",
+                "ru": "Трактор"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -55,22 +50,17 @@
               ]
             },
             {
-              "key": "pasture",
+              "key": "combine_harvester",
               "name": {
-                "hy": "Արոտավայր",
-                "en": "Pasture",
-                "ru": "Пастбище"
+                "hy": "Կոմբայն",
+                "en": "Combine harvester",
+                "ru": "Комбайн"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -92,22 +82,17 @@
               ]
             },
             {
-              "key": "agricultural_land",
+              "key": "motoblock",
               "name": {
-                "hy": "Գյուղնշանակության հողատարածք",
-                "en": "Agricultural land",
-                "ru": "Сельскохозяйственный участок"
+                "hy": "Մոտոբլոկ",
+                "en": "Motoblock",
+                "ru": "Мотоблок"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -129,22 +114,17 @@
               ]
             },
             {
-              "key": "vineyard",
+              "key": "harvesting_machinery",
               "name": {
-                "hy": "Խաղողի այգի",
-                "en": "Vineyard",
-                "ru": "Виноградник"
+                "hy": "Բերքահավաքի տեխնիկա",
+                "en": "Harvesting machinery",
+                "ru": "Уборочная техника"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -166,22 +146,17 @@
               ]
             },
             {
-              "key": "hayfield",
+              "key": "truck",
               "name": {
-                "hy": "Խոտհարք",
-                "en": "Hayfield",
-                "ru": "Сенокос"
+                "hy": "Բեռնատար",
+                "en": "Truck",
+                "ru": "Грузовик"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -203,22 +178,17 @@
               ]
             },
             {
-              "key": "greenhouse_land",
+              "key": "refrigerated_truck",
               "name": {
-                "hy": "Ջերմոցային հողատարածք",
-                "en": "Greenhouse land",
-                "ru": "Тепличный участок"
+                "hy": "Սառնարանով մեքենա",
+                "en": "Refrigerated truck",
+                "ru": "Рефрижератор"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -240,22 +210,81 @@
               ]
             },
             {
-              "key": "household_land_plot",
+              "key": "tractor_attachment",
               "name": {
-                "hy": "Տնամերձ հողատարածք",
-                "en": "Household land plot",
-                "ru": "Приусадебный участок"
+                "hy": "Տրակտորի կցորդ",
+                "en": "Tractor attachment",
+                "ru": "Навесное оборудование для трактора"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
                 },
                 {
-                  "hy": "հեկտ",
-                  "en": "ha",
-                  "ru": "га"
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "trailer",
+              "name": {
+                "hy": "Կցասայլ",
+                "en": "Trailer",
+                "ru": "Прицеп"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "mini_cultivator",
+              "name": {
+                "hy": "Մինի կուլտիվատոր",
+                "en": "Mini cultivator",
+                "ru": "Мини-культиватор"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -279,25 +308,25 @@
           ]
         },
         {
-          "key": "buildings",
+          "key": "soil_cultivation_equipment",
           "name": {
-            "hy": "Շինություններ",
-            "en": "Buildings",
-            "ru": "Здания и сооружения"
+            "hy": "Հողագործական գործիքներ",
+            "en": "Soil Cultivation Equipment",
+            "ru": "Почвообрабатывающие орудия"
           },
           "items": [
             {
-              "key": "warehouse",
+              "key": "plough",
               "name": {
-                "hy": "Պահեստ",
-                "en": "Warehouse",
-                "ru": "Склад"
+                "hy": "Գութան",
+                "en": "Plough",
+                "ru": "Плуг"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -319,17 +348,17 @@
               ]
             },
             {
-              "key": "barn",
+              "key": "disc_harrow",
               "name": {
-                "hy": "Անասնագոմ",
-                "en": "Barn",
-                "ru": "Хлев"
+                "hy": "Դիսկավորիչ",
+                "en": "Disc harrow",
+                "ru": "Дисковая борона"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -351,17 +380,17 @@
               ]
             },
             {
-              "key": "greenhouse",
+              "key": "cultivator",
               "name": {
-                "hy": "Ջերմոց",
-                "en": "Greenhouse",
-                "ru": "Теплица"
+                "hy": "Կուլտիվատոր",
+                "en": "Cultivator",
+                "ru": "Культиватор"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -383,17 +412,17 @@
               ]
             },
             {
-              "key": "production_facility",
+              "key": "mower",
               "name": {
-                "hy": "Արտադրական շինություն",
-                "en": "Production facility",
-                "ru": "Производственное помещение"
+                "hy": "Խոտհնձիչ",
+                "en": "Mower",
+                "ru": "Косилка"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -415,32 +444,17 @@
               ]
             },
             {
-              "key": "cold_storage",
+              "key": "trencher_digger",
               "name": {
-                "hy": "Սառնարան",
-                "en": "Cold storage",
-                "ru": "Холодильное помещение"
+                "hy": "Հողափոր",
+                "en": "Trencher / Digger",
+                "ru": "Землекоп"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
-                },
-                {
-                  "hy": "կգ",
-                  "en": "kg",
-                  "ru": "кг"
-                },
-                {
-                  "hy": "տն",
-                  "en": "t",
-                  "ru": "т"
-                },
-                {
-                  "hy": "մ³",
-                  "en": "m³",
-                  "ru": "м³"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -462,17 +476,17 @@
               ]
             },
             {
-              "key": "poultry_house",
+              "key": "land_leveler",
               "name": {
-                "hy": "Թռչնանոց",
-                "en": "Poultry house",
-                "ru": "Птичник"
+                "hy": "Հարթեցնող սարք",
+                "en": "Land leveler",
+                "ru": "Планировщик почвы"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -494,17 +508,17 @@
               ]
             },
             {
-              "key": "drying_facility",
+              "key": "seeder",
               "name": {
-                "hy": "Չորանոց",
-                "en": "Drying facility",
-                "ru": "Сушильное помещение"
+                "hy": "Սերմնացան",
+                "en": "Seeder",
+                "ru": "Сеялка"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -526,17 +540,17 @@
               ]
             },
             {
-              "key": "milk_processing_facility",
+              "key": "transplanter",
               "name": {
-                "hy": "Կաթի վերամշակման շինություն",
-                "en": "Milk processing facility",
-                "ru": "Помещение переработки молока"
+                "hy": "Սածիլատնկիչ",
+                "en": "Transplanter",
+                "ru": "Рассадопосадочная машина"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [
@@ -558,17 +572,463 @@
               ]
             },
             {
-              "key": "fruit_drying_facility",
+              "key": "potato_planter",
               "name": {
-                "hy": "Չրանոց",
-                "en": "Fruit drying facility",
-                "ru": "Сушилка для фруктов"
+                "hy": "Կարտոֆիլ տնկող սարք",
+                "en": "Potato planter",
+                "ru": "Картофелесажалка"
               },
               "measurements": [
                 {
-                  "hy": "մ²",
-                  "en": "m²",
-                  "ru": "м²"
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "spraying_equipment",
+          "name": {
+            "hy": "Սրսկման գործիքներ",
+            "en": "Spraying Equipment",
+            "ru": "Опрыскивающее оборудование"
+          },
+          "items": [
+            {
+              "key": "pesticide_sprayer",
+              "name": {
+                "hy": "Թունաքիմիկատ ցողող",
+                "en": "Pesticide sprayer",
+                "ru": "Опрыскиватель для химикатов"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "pulverizer_sprayer",
+              "name": {
+                "hy": "Պուլվերիզատոր",
+                "en": "Pulverizer sprayer",
+                "ru": "Пульверизатор"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "mounted_sprayer",
+              "name": {
+                "hy": "Կցորդային ցողող",
+                "en": "Mounted sprayer",
+                "ru": "Навесной опрыскиватель"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "self_propelled_sprayer",
+              "name": {
+                "hy": "Ինքնագնաց ցողող",
+                "en": "Self-propelled sprayer",
+                "ru": "Самоходный опрыскиватель"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "duster",
+              "name": {
+                "hy": "Փոշիացնող սարք",
+                "en": "Duster",
+                "ru": "Опылитель"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "irrigation_equipment",
+          "name": {
+            "hy": "Ոռոգման սարքավորումներ",
+            "en": "Irrigation Equipment",
+            "ru": "Оросительное оборудование"
+          },
+          "items": [
+            {
+              "key": "water_pump",
+              "name": {
+                "hy": "Ջրի պոմպ",
+                "en": "Water pump",
+                "ru": "Водяной насос"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "drip_irrigation_system",
+              "name": {
+                "hy": "Կաթիլային ոռոգման սարքավորում",
+                "en": "Drip irrigation system",
+                "ru": "Капельная система орошения"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "sprinkler_system",
+              "name": {
+                "hy": "Ջրցան համակարգ",
+                "en": "Sprinkler system",
+                "ru": "Система дождевания"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": "electric_tools",
+          "name": {
+            "hy": "Էլեկտրական գործիքներ",
+            "en": "Electric Tools",
+            "ru": "Электроинструменты"
+          },
+          "items": [
+            {
+              "key": "electric_saw",
+              "name": {
+                "hy": "Էլեկտրասղոց",
+                "en": "Electric saw",
+                "ru": "Электропила"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "electric_shear",
+              "name": {
+                "hy": "Էլեկտրամկրատ",
+                "en": "Electric shear",
+                "ru": "Электроножницы"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "electric_mower",
+              "name": {
+                "hy": "Խոտհնձիչ",
+                "en": "Electric mower",
+                "ru": "Электрокосилка"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "brush_cutter",
+              "name": {
+                "hy": "Թփահատ",
+                "en": "Brush cutter",
+                "ru": "Кусторез"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
+                }
+              ],
+              "rent_measurements": [
+                {
+                  "hy": "օր",
+                  "en": "day",
+                  "ru": "дн"
+                },
+                {
+                  "hy": "ամիս",
+                  "en": "month",
+                  "ru": "мес"
+                },
+                {
+                  "hy": "տարի",
+                  "en": "year",
+                  "ru": "год"
+                }
+              ]
+            },
+            {
+              "key": "electric_sprayer",
+              "name": {
+                "hy": "Սրսկիչ",
+                "en": "Electric sprayer",
+                "ru": "Электроопрыскиватель"
+              },
+              "measurements": [
+                {
+                  "hy": "հատ",
+                  "en": "unit",
+                  "ru": "шт"
                 }
               ],
               "rent_measurements": [

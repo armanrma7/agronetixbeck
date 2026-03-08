@@ -105,23 +105,14 @@ export class CreateAnnouncementDto {
   @ArrayMaxSize(3, { message: 'Maximum 3 images allowed.' })
   images?: string[];
 
-  // For category = 'rent': date_from is required
-  @ApiProperty({ 
-    required: false,
-    description: 'Required for rent category (format: YYYY-MM-DD)',
-    example: '2026-02-01' 
-  })
-  @ValidateIf((o) => o.category === AnnouncementCategory.RENT)
+  // Optional for all announcement types (format: YYYY-MM-DD). When both set, date_from must be before date_to.
+  @ApiProperty({ required: false, description: 'Start date (YYYY-MM-DD)', example: '2026-02-01' })
+  @IsOptional()
   @IsDateString({}, { message: 'date_from must be a valid date (YYYY-MM-DD).' })
   date_from?: string;
 
-  // For category = 'rent': date_to is required
-  @ApiProperty({ 
-    required: false,
-    description: 'Required for rent category (must be after date_from, format: YYYY-MM-DD)',
-    example: '2026-02-28' 
-  })
-  @ValidateIf((o) => o.category === AnnouncementCategory.RENT)
+  @ApiProperty({ required: false, description: 'End date (YYYY-MM-DD), must be after date_from when both provided', example: '2026-02-28' })
+  @IsOptional()
   @IsDateString({}, { message: 'date_to must be a valid date (YYYY-MM-DD).' })
   date_to?: string;
 
