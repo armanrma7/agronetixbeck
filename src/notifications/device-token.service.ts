@@ -12,17 +12,14 @@ export class DeviceTokenService {
   ) {}
 
   /**
-   * Ensure only ONE active device per user.
-   * Marks all other tokens for this user as inactive, keeping only keepId active.
+   * Ensure only ONE device per user.
+   * Removes all other device tokens for this user, keeping only keepId.
    */
-  private async deactivateOtherUserDevices(userId: string, keepId: string): Promise<void> {
-    await this.deviceTokenRepository.update(
-      {
-        user_id: userId,
-        id: Not(keepId),
-      },
-      { is_active: false },
-    );
+  private async removeOtherUserDevices(userId: string, keepId: string): Promise<void> {
+    await this.deviceTokenRepository.delete({
+      user_id: userId,
+      id: Not(keepId),
+    });
   }
 
   /**
@@ -75,8 +72,8 @@ export class DeviceTokenService {
         }
 
         const saved = await this.deviceTokenRepository.save(deviceToken);
-        // Enforce single active device per user
-        await this.deactivateOtherUserDevices(userId, saved.id);
+        // Enforce single device per user
+        await this.removeOtherUserDevices(userId, saved.id);
         return saved;
       }
     }
@@ -117,8 +114,8 @@ export class DeviceTokenService {
       }
 
       const saved = await this.deviceTokenRepository.save(deviceToken);
-      // Enforce single active device per user
-      await this.deactivateOtherUserDevices(userId, saved.id);
+      // Enforce single device per user
+      await this.removeOtherUserDevices(userId, saved.id);
       return saved;
     }
 
@@ -155,8 +152,8 @@ export class DeviceTokenService {
       }
     }
 
-    // Enforce single active device per user
-    await this.deactivateOtherUserDevices(userId, savedToken.id);
+    // Enforce single device per user
+    await this.removeOtherUserDevices(userId, savedToken.id);
     return savedToken;
   }
 

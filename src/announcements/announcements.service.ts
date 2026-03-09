@@ -264,10 +264,18 @@ export class AnnouncementsService {
     return date;
   }
 
-  /** Only allow valid Unit enum values; invalid or unknown (e.g. "unit") become null. */
+  /** Only allow valid Unit enum values; invalid or unknown (e.g. "unit") become null.
+   * Also normalizes common synonyms such as "m²" / "mÂ²" → "m2".
+   */
   private normalizeUnit(value: unknown): Unit | null {
     if (value == null || value === '') return null;
-    const s = String(value).toLowerCase().trim();
+    let s = String(value).toLowerCase().trim();
+
+    // Normalize known alternatives
+    if (s === 'm²' || s === 'mÂ²') {
+      s = 'm2';
+    }
+
     return Object.values(Unit).includes(s as Unit) ? (s as Unit) : null;
   }
 
@@ -448,8 +456,8 @@ export class AnnouncementsService {
       description: createDto.description,
       owner_id: userId,
       status,
-      // For goods: count required, others: NULL
-      count: createDto.category === AnnouncementCategory.GOODS ? createDto.count : null,
+      // Count: for GOODS it is required; for other categories it is optional but, if provided, should be stored.
+      count: createDto.count ?? null,
       // For goods: daily_limit optional, others: NULL
       daily_limit: createDto.category === AnnouncementCategory.GOODS ? (createDto.daily_limit || null) : null,
       unit: this.normalizeUnit(createDto.unit),
