@@ -161,8 +161,23 @@ export class FcmService {
     tokens: string[],
     payload: NotificationPayload,
   ): Promise<{ successCount: number; failureCount: number; invalidTokens: string[]; failureReason?: string }> {
-    if (!this.jwtClient || tokens.length === 0) {
+    if (tokens.length === 0) {
       return { successCount: 0, failureCount: 0, invalidTokens: [] };
+    }
+
+    if (!this.jwtClient) {
+      // Configuration problem: we have tokens but FCM is not initialized.
+      // Treat all as failed and surface a clear reason upstream.
+      this.logger.warn(
+        `FCM not initialized. Skipping notification to ${tokens.length} device(s). ` +
+          `Check FIREBASE_SERVICE_ACCOUNT in environment.`,
+      );
+      return {
+        successCount: 0,
+        failureCount: tokens.length,
+        invalidTokens: [],
+        failureReason: 'FCM not initialized',
+      };
     }
 
     const results = await Promise.all(
