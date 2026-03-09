@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { DeviceToken } from '../entities/device-token.entity';
 import { RegisterDeviceDto } from '../device-tokens/dto/register-device.dto';
 
@@ -10,6 +10,20 @@ export class DeviceTokenService {
     @InjectRepository(DeviceToken)
     private deviceTokenRepository: Repository<DeviceToken>,
   ) {}
+
+  /**
+   * Ensure only ONE active device per user.
+   * Marks all other tokens for this user as inactive, keeping only keepId active.
+   */
+  private async deactivateOtherUserDevices(userId: string, keepId: string): Promise<void> {
+    await this.deviceTokenRepository.update(
+      {
+        user_id: userId,
+        id: Not(keepId),
+      },
+      { is_active: false },
+    );
+  }
 
   /**
    * Register or update a device token for a user
@@ -60,7 +74,10 @@ export class DeviceTokenService {
           }
         }
 
-        return this.deviceTokenRepository.save(deviceToken);
+        const saved = await this.deviceTokenRepository.save(deviceToken);
+        // Enforce single active device per user
+        await this.deactivateOtherUserDevices(userId, saved.id);
+        return saved;
       }
     }
 
@@ -99,7 +116,10 @@ export class DeviceTokenService {
         }
       }
 
-      return this.deviceTokenRepository.save(deviceToken);
+      const saved = await this.deviceTokenRepository.save(deviceToken);
+      // Enforce single active device per user
+      await this.deactivateOtherUserDevices(userId, saved.id);
+      return saved;
     }
 
     // Priority 3: Create new device token
@@ -135,6 +155,8 @@ export class DeviceTokenService {
       }
     }
 
+    // Enforce single active device per user
+    await this.deactivateOtherUserDevices(userId, savedToken.id);
     return savedToken;
   }
 
