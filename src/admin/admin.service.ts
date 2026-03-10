@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { User, UserType, AccountStatus } from '../entities/user.entity';
 import { UnlockUserDto } from './dto/unlock-user.dto';
 import { VerifyCompanyDto } from './dto/verify-company.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationType } from '../entities/notification.entity';
 
@@ -14,6 +15,80 @@ export class AdminService {
     private userRepository: Repository<User>,
     private notificationService: NotificationService,
   ) {}
+
+  /**
+   * Admin: get users with optional filters and pagination.
+   */
+  async getAllUsers(params: {
+    page?: number;
+    limit?: number;
+    name?: string;
+    phone?: string;
+    user_type?: UserType;
+    account_status?: AccountStatus;
+    is_locked?: boolean;
+  }): Promise<{ users: Partial<User>[]; total: number; page: number; limit: number }> {
+    const page = params.page && params.page > 0 ? params.page : 1;
+    const limit =
+      params.limit && params.limit > 0 && params.limit <= 100 ? params.limit : 20;
+    const skip = (page - 1) * limit;
+
+    const qb = this.userRepository
+      .createQueryBuilder('user')
+      .orderBy('user.created_at', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (params.name) {
+      qb.andWhere('user.full_name ILIKE :name', { name: `%${params.name}%` });
+    }
+    if (params.phone) {
+      qb.andWhere('user.phone ILIKE :phone', { phone: `%${params.phone}%` });
+    }
+    if (params.user_type) {
+      qb.andWhere('user.user_type = :user_type', { user_type: params.user_type });
+    }
+    if (params.account_status) {
+      qb.andWhere('user.account_status = :status', {
+        status: params.account_status,
+      });
+    }
+    if (params.is_locked !== undefined) {
+      qb.andWhere('user.is_locked = :locked', { locked: params.is_locked });
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+    const users = rows.map(({ password: _pw, ...u }) => u);
+
+    return { users, total, page, limit };
+  }
+
+  /**
+   * Admin: update user type/status/lock.
+   */
+  async updateUserAsAdmin(
+    id: string,
+    dto: AdminUpdateUserDto,
+  ): Promise<Partial<User>> {
+    const user = await this.userRepository.findOne({ where: { id } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (dto.user_type !== undefined) {
+      user.user_type = dto.user_type;
+    }
+    if (dto.account_status !== undefined) {
+      user.account_status = dto.account_status;
+    }
+    if (dto.is_locked !== undefined) {
+      user.is_locked = dto.is_locked;
+    }
+
+    const saved = await this.userRepository.save(user);
+    const { password: _pw, ...userWithoutPassword } = saved;
+    return userWithoutPassword;
+  }
 
   /**
    * Unlock or lock a user account

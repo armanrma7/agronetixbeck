@@ -522,6 +522,8 @@ export class AnnouncementsService {
     page?: number;
     limit?: number;
     excludeOwnerId?: string;
+    isAdmin?: boolean;
+    ownerId?: string;
   }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     // Validate status enum if provided
     if (params.status) {
@@ -561,12 +563,17 @@ export class AnnouncementsService {
         'item.measurements',
       ]);
 
-    // Default to published if no status specified
+    const isAdmin = params.isAdmin === true;
+
+    // Status filter:
+    // - If status is provided: always filter by that status (for all users).
+    // - If no status and caller is admin: do NOT filter by status (see all).
+    // - If no status and caller is not admin: default to PUBLISHED.
     if (params.status) {
       queryBuilder.andWhere('announcement.status = :status', {
         status: params.status,
       });
-    } else {
+    } else if (!isAdmin) {
       queryBuilder.andWhere('announcement.status = :status', {
         status: AnnouncementStatus.PUBLISHED,
       });
@@ -582,6 +589,13 @@ export class AnnouncementsService {
     if (params.type) {
       queryBuilder.andWhere('announcement.type = :type', {
         type: params.type,
+      });
+    }
+
+    // Filter by owner when requested (typically admin usage)
+    if (params.ownerId) {
+      queryBuilder.andWhere('announcement.owner_id = :ownerId', {
+        ownerId: params.ownerId,
       });
     }
 
@@ -643,8 +657,8 @@ export class AnnouncementsService {
       });
     }
 
-    // Exclude current user's announcements if excludeOwnerId is provided
-    if (params.excludeOwnerId) {
+    // Exclude current user's announcements if excludeOwnerId is provided (non-admin only)
+    if (params.excludeOwnerId && !isAdmin) {
       queryBuilder.andWhere('announcement.owner_id != :excludeOwnerId', {
         excludeOwnerId: params.excludeOwnerId,
       });

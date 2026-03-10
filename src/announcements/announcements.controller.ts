@@ -18,6 +18,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AnnouncementStatus } from '../entities/announcement.entity';
+import { UserType } from '../entities/user.entity';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { AnnouncementsService } from './announcements.service';
@@ -252,6 +253,7 @@ export class AnnouncementsController {
   @ApiQuery({ name: 'subgroup_id', required: false, isArray: true, description: 'Filter by subgroup — GoodsSubcategory UUID(s); repeat for multiple' })
   @ApiQuery({ name: 'region', required: false, description: 'Region UUID (can be multiple: ?region=uuid1&region=uuid2)' })
   @ApiQuery({ name: 'village', required: false, description: 'Village UUID (can be multiple: ?village=uuid1&village=uuid2)' })
+  @ApiQuery({ name: 'owner_id', required: false, description: 'Admin only: filter by owner (announcer) UUID' })
   @ApiQuery({ name: 'price_from', required: false, description: 'Minimum price (inclusive)' })
   @ApiQuery({ name: 'price_to', required: false, description: 'Maximum price (inclusive)' })
   @ApiQuery({ name: 'created_from', required: false, description: 'Filter by created_at from date (YYYY-MM-DD)' })
@@ -304,6 +306,7 @@ export class AnnouncementsController {
     @Query('created_to') created_to?: string,
     @Query('page') page?: number,
     @Query('limit') limit?: number,
+    @Query('owner_id') owner_id?: string,
     @Request() req?: any,
   ) {
     // Validate status enum if provided
@@ -336,6 +339,8 @@ export class AnnouncementsController {
     }
 
     const currentUserId = req?.user?.id;
+    const currentUserType = req?.user?.user_type as UserType | undefined;
+    const isAdmin = currentUserType === UserType.ADMIN;
 
     const priceFromNum = price_from !== undefined && price_from !== '' ? Number(price_from) : undefined;
     const priceToNum = price_to !== undefined && price_to !== '' ? Number(price_to) : undefined;
@@ -345,6 +350,10 @@ export class AnnouncementsController {
     if (priceToNum !== undefined && (Number.isNaN(priceToNum) || priceToNum < 0)) {
       throw new BadRequestException('price_to must be a non-negative number');
     }
+
+    // For non-admins, ignore owner_id unless it matches their own id
+    const effectiveOwnerId =
+      isAdmin || !owner_id || owner_id === currentUserId ? owner_id : undefined;
 
     return this.announcementsService.findAll({
       category: categories,
@@ -361,6 +370,8 @@ export class AnnouncementsController {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       excludeOwnerId: currentUserId,
+      isAdmin,
+      ownerId: effectiveOwnerId,
     });
   }
 

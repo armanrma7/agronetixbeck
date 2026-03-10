@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   UseGuards,
   Request,
   HttpCode,
@@ -16,10 +17,12 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { DeviceTokenService } from '../notifications/device-token.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserType } from '../entities/user.entity';
 
 @ApiTags('device-tokens')
 @Controller('device-tokens')
@@ -44,13 +47,30 @@ export class DeviceTokensController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all devices for current user' })
+  @ApiOperation({
+    summary: 'Get device tokens',
+    description:
+      '- Non-admin: returns only current user devices.\n' +
+      '- Admin: returns all devices, or filter by user_id.',
+  })
+  @ApiQuery({
+    name: 'user_id',
+    required: false,
+    description: 'Admin only: filter by user UUID',
+    type: String,
+  })
   @ApiResponse({
     status: 200,
     description: 'List of user devices',
     type: [Object],
   })
-  async getUserDevices(@Request() req) {
+  async getUserDevices(@Request() req, @Query('user_id') userId?: string) {
+    // Admin can list all devices or filter by user_id
+    if (req.user?.user_type === UserType.ADMIN) {
+      return this.deviceTokenService.getDevicesForAdmin(userId);
+    }
+
+    // Non-admin always sees only their own devices (ignore user_id query)
     return this.deviceTokenService.getUserDevices(req.user.id);
   }
 

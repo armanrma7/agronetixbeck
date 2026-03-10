@@ -2,19 +2,99 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
+  Param,
   HttpCode,
   HttpStatus,
+  UseGuards,
+  ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { UnlockUserDto } from './dto/unlock-user.dto';
 import { VerifyCompanyDto } from './dto/verify-company.dto';
+import { AdminUpdateUserDto } from './dto/admin-update-user.dto';
+import { IsAdminGuard } from '../announcements/guards/is-admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @ApiTags('admin')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, IsAdminGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  @Get('users')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Admin: get users',
+    description:
+      'Supports filters: name (full_name), phone, user_type, account_status, is_locked, plus pagination.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Page number (default 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Items per page (default 20, max 100)' })
+  @ApiQuery({ name: 'name', required: false, type: String, description: 'Search by full_name (contains, case-insensitive)' })
+  @ApiQuery({ name: 'phone', required: false, type: String, description: 'Search by phone (contains)' })
+  @ApiQuery({ name: 'user_type', required: false, enum: ['farmer', 'company', 'admin'] })
+  @ApiQuery({ name: 'account_status', required: false, enum: ['pending', 'active', 'blocked'] })
+  @ApiQuery({ name: 'is_locked', required: false, type: Boolean })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of users matching filters',
+    type: Object,
+  })
+  async getAllUsers(
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+    @Query('name') name?: string,
+    @Query('phone') phone?: string,
+    @Query('user_type') user_type?: string,
+    @Query('account_status') account_status?: string,
+    @Query('is_locked') is_locked?: string,
+  ) {
+    const isLockedBool =
+      is_locked === undefined
+        ? undefined
+        : is_locked === 'true'
+        ? true
+        : is_locked === 'false'
+        ? false
+        : undefined;
+
+    return this.adminService.getAllUsers({
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      name,
+      phone,
+      user_type: user_type as any,
+      account_status: account_status as any,
+      is_locked: isLockedBool,
+    });
+  }
+
+  @Patch('users/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Admin: update user type/status/lock' })
+  @ApiResponse({
+    status: 200,
+    description: 'User updated successfully',
+    type: Object,
+  })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async updateUser(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AdminUpdateUserDto,
+  ) {
+    return this.adminService.updateUserAsAdmin(id, dto);
+  }
 
   @Post('unlock-user')
   @HttpCode(HttpStatus.OK)

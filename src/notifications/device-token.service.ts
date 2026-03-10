@@ -163,6 +163,52 @@ export class DeviceTokenService {
   async getUserDevices(userId: string): Promise<DeviceToken[]> {
     return this.deviceTokenRepository.find({
       where: { user_id: userId },
+      relations: ['user'],
+      select: {
+        id: true,
+        user_id: true,
+        fcm_token: true,
+        device_id: true,
+        device_type: true,
+        device_model: true,
+        os_version: true,
+        app_version: true,
+        is_active: true,
+        created_at: true,
+        updated_at: true,
+        user: {
+          id: true,
+          full_name: true,
+        },
+      },
+      order: { created_at: 'DESC' },
+    });
+  }
+
+  /**
+   * Admin: get devices for all users (optionally filtered by user_id).
+   */
+  async getDevicesForAdmin(userId?: string): Promise<DeviceToken[]> {
+    return this.deviceTokenRepository.find({
+      where: userId ? { user_id: userId } : {},
+      relations: ['user'],
+      select: {
+        id: true,
+        user_id: true,
+        fcm_token: true,
+        device_id: true,
+        device_type: true,
+        device_model: true,
+        os_version: true,
+        app_version: true,
+        is_active: true,
+        created_at: true,
+        updated_at: true,
+        user: {
+          id: true,
+          full_name: true,
+        },
+      },
       order: { created_at: 'DESC' },
     });
   }
