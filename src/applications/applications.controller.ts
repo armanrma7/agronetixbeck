@@ -17,6 +17,7 @@ import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserType } from '../entities/user.entity';
 
 @ApiTags('applications')
 @Controller('applications')
@@ -43,11 +44,14 @@ export class ApplicationsController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get applications (filtered by announcementId if provided) with pagination' })
+  @ApiOperation({
+    summary: 'Get applications with pagination',
+    description: 'Without announcementId: admin sees all applications; other users see only their own. With announcementId: announcement owner or admin sees that announcement\'s applications.',
+  })
   @ApiQuery({
     name: 'announcementId',
     required: false,
-    description: 'Filter applications by announcement ID (announcer only)',
+    description: 'Filter applications by announcement ID (announcement owner or admin)',
     type: String,
   })
   @ApiQuery({
@@ -106,8 +110,10 @@ export class ApplicationsController {
         limitNum,
       );
     }
-    // Otherwise return all applications (admin only or user's own)
-    // For now, return user's own applications
+    // Admin: all applications; otherwise user's own
+    if (req.user.user_type === UserType.ADMIN) {
+      return this.applicationsService.findAllForAdmin(pageNum, limitNum);
+    }
     return this.applicationsService.findMyApplications(req.user.id, pageNum, limitNum);
   }
 
@@ -225,58 +231,75 @@ export class ApplicationsController {
     @Body() updateDto: UpdateApplicationDto,
     @Request() req,
   ) {
-    return this.applicationsService.update(applicationId, updateDto, req.user.id);
+    return this.applicationsService.update(applicationId, updateDto, req.user.id, req.user.user_type);
   }
 
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get a specific application by ID' })
+  @ApiOperation({
+    summary: 'Get a specific application by ID',
+    description: 'Applicant, announcement owner, or admin can view any application.',
+  })
   @ApiResponse({
     status: 200,
     description: 'Application details',
   })
   @ApiResponse({ status: 404, description: 'Application not found' })
-  async findOne(@Param('id') id: string) {
-    return this.applicationsService.findOne(id);
+  async findOne(@Param('id') id: string, @Request() req?) {
+    return this.applicationsService.findOne(id, req?.user?.id, req?.user?.user_type);
   }
 
   @Post(':id/approve')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Approve application (announcer only)' })
+  @ApiOperation({ summary: 'Approve application (announcer or admin)' })
   @ApiResponse({
     status: 200,
     description: 'Application approved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Application approved successfully' },
+        application: { type: 'object', description: 'Updated application' },
+      },
+    },
   })
-  @ApiResponse({ status: 403, description: 'Not the announcer' })
+  @ApiResponse({ status: 403, description: 'Not the announcer or admin' })
   async approve(
     @Param('id') applicationId: string,
     @Request() req,
   ) {
     const application = await this.applicationsService.findOne(applicationId);
-    await this.applicationsService.approve(application.announcement_id, applicationId, req.user.id);
-    return { message: 'Application approved successfully' };
+    const updated = await this.applicationsService.approve(application.announcement_id, applicationId, req.user.id, req.user.user_type);
+    return { message: 'Application approved successfully', application: updated };
   }
 
   @Post(':id/reject')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Reject application (announcement owner only)' })
+  @ApiOperation({ summary: 'Reject application (announcement owner or admin)' })
   @ApiResponse({
     status: 200,
     description: 'Application rejected successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Application rejected successfully' },
+        application: { type: 'object', description: 'Updated application' },
+      },
+    },
   })
-  @ApiResponse({ status: 403, description: 'Only the announcement owner can reject' })
+  @ApiResponse({ status: 403, description: 'Only the announcement owner or admin can reject' })
   async reject(
     @Param('id') applicationId: string,
     @Request() req,
   ) {
     const application = await this.applicationsService.findOne(applicationId);
-    await this.applicationsService.reject(application.announcement_id, applicationId, req.user.id);
-    return { message: 'Application rejected successfully' };
+    const updated = await this.applicationsService.reject(application.announcement_id, applicationId, req.user.id, req.user.user_type);
+    return { message: 'Application rejected successfully', application: updated };
   }
 
   @Post(':id/cancel')
@@ -311,7 +334,7 @@ export class ApplicationsController {
     @Param('id') applicationId: string,
     @Request() req,
   ) {
-    const application = await this.applicationsService.cancel(applicationId, req.user.id);
+    const application = await this.applicationsService.cancel(applicationId, req.user.id, req.user.user_type);
     return { message: 'Application canceled successfully', application };
   }
 
@@ -326,6 +349,13 @@ export class ApplicationsController {
   @ApiResponse({
     status: 200,
     description: 'Application closed successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        message: { type: 'string', example: 'Application closed successfully' },
+        application: { type: 'object', description: 'Updated application' },
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Invalid status transition or only pending can be closed by applicant' })
   @ApiResponse({ status: 403, description: 'Not the announcer or the applicant' })
@@ -334,7 +364,7 @@ export class ApplicationsController {
     @Request() req,
   ) {
     const application = await this.applicationsService.findOne(applicationId);
-    const closed = await this.applicationsService.close(application.announcement_id, applicationId, req.user.id);
+    const closed = await this.applicationsService.close(application.announcement_id, applicationId, req.user.id, req.user.user_type);
     return { message: 'Application closed successfully', application: closed };
   }
 }

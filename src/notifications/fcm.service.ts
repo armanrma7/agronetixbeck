@@ -21,8 +21,10 @@ export class FcmService {
   private initializeFirebase(): void {
     try {
       const serviceAccount = this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT');
+      console.info(serviceAccount);
 
       if (!serviceAccount) {
+        console.info('FIREBASE_SERVICE_ACCOUNT not configured. FCM notifications will be disabled.');
         this.logger.warn('FIREBASE_SERVICE_ACCOUNT not configured. FCM notifications will be disabled.');
         return;
       }
@@ -30,6 +32,7 @@ export class FcmService {
       let serviceAccountJson: any;
 
       if (serviceAccount.startsWith('./') || serviceAccount.startsWith('/') || serviceAccount.endsWith('.json')) {
+        console.info('Loading service account from file');
         const fs = require('fs');
         const path = require('path');
         const filePath = path.resolve(process.cwd(), serviceAccount);
@@ -42,7 +45,9 @@ export class FcmService {
         serviceAccountJson = JSON.parse(fs.readFileSync(filePath, 'utf8'));
         this.logger.log(`Firebase service account loaded from file: ${filePath}`);
       } else {
+        console.info('Loading service account from environment variable');
         serviceAccountJson = JSON.parse(serviceAccount);
+        console.info(serviceAccountJson);
         this.logger.log('Firebase service account loaded from environment variable');
       }
 

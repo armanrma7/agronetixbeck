@@ -20,6 +20,7 @@ import {
 import { FavoritesService } from './favorites.service';
 import { CreateFavoriteDto } from './dto/create-favorite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { UserType } from '../entities/user.entity';
 
 @ApiTags('favorites')
 @Controller('favorites')
@@ -43,13 +44,19 @@ export class FavoritesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all favorite announcements (only published)' })
+  @ApiOperation({
+    summary: 'Get all favorite announcements (only published)',
+    description: 'Admin: sees all users\' favorites. Other users: see only their own.',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of favorite announcements',
     type: [Object],
   })
   async findAll(@Request() req) {
+    if (req.user.user_type === UserType.ADMIN) {
+      return this.favoritesService.findAllForAdmin();
+    }
     return this.favoritesService.findAll(req.user.id);
   }
 

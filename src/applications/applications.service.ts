@@ -262,12 +262,13 @@ export class ApplicationsService {
   }
 
   /**
-   * Get one application by ID (includes applicant_id and applicant with id for the user who created the application)
+   * Get one application by ID. Allowed for applicant, announcement owner, or admin.
+   * If userId/userType are provided, enforces access; otherwise returns without check (for internal use).
    */
-  async findOne(id: string): Promise<Application> {
+  async findOne(id: string, userId?: string, userType?: string): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id },
-      relations: ['applicant', 'announcement'],
+      relations: ['applicant', 'announcement', 'announcement.owner'],
       select: {
         id: true,
         announcement_id: true,
@@ -279,7 +280,7 @@ export class ApplicationsService {
         created_at: true,
         updated_at: true,
         applicant: { id: true, full_name: true },
-        announcement: { id: true },
+        announcement: { id: true, owner_id: true, owner: { id: true } },
       },
       withDeleted: false,
     });
@@ -288,16 +289,26 @@ export class ApplicationsService {
       throw new NotFoundException(`Application with ID ${id} not found`);
     }
 
+    if (userId !== undefined && userType !== undefined) {
+      const isAdmin = userType === UserType.ADMIN;
+      const isApplicant = application.applicant_id === userId;
+      const isAnnouncementOwner = (application.announcement as { owner_id?: string })?.owner_id === userId;
+      if (!isAdmin && !isApplicant && !isAnnouncementOwner) {
+        throw new ForbiddenException('You can only view your own applications or those for your announcements');
+      }
+    }
+
     return application;
   }
 
   /**
-   * Update application: announcement owner or application owner (applicant) can edit, only when status is PENDING.
+   * Update application: announcement owner or application owner (applicant) or admin can edit, only when status is PENDING.
    */
   async update(
     applicationId: string,
     updateDto: UpdateApplicationDto,
     userId: string,
+    userType?: string,
   ): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
@@ -317,7 +328,8 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId && application.applicant_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId && application.applicant_id !== userId) {
       throw new ForbiddenException('Only the announcement owner or the application owner (applicant) can edit this application');
     }
 
@@ -351,7 +363,8 @@ export class ApplicationsService {
       application.notes = updateDto.notes;
     }
 
-    return this.applicationRepository.save(application);
+    await this.applicationRepository.save(application);
+    return this.findOne(applicationId);
   }
 
   /**
@@ -433,6 +446,68 @@ export class ApplicationsService {
   }
 
   /**
+   * Admin: get all applications with pagination (no filter by applicant).
+   */
+  async findAllForAdmin(
+    page?: number,
+    limit?: number,
+  ): Promise<{ applications: Application[]; total: number; page: number; limit: number }> {
+    const pageNum = page || 1;
+    const limitNum = limit || 20;
+    const skip = (pageNum - 1) * limitNum;
+
+    const safeUserSelect = {
+      id: true,
+      full_name: true,
+      phone: true,
+      profile_picture: true,
+      user_type: true,
+    };
+
+    const [applications, total] = await this.applicationRepository.findAndCount({
+      relations: ['applicant', 'announcement', 'announcement.owner'],
+      select: {
+        id: true,
+        announcement_id: true,
+        applicant_id: true,
+        count: true,
+        delivery_dates: true,
+        notes: true,
+        status: true,
+        created_at: true,
+        updated_at: true,
+        applicant: safeUserSelect,
+        announcement: {
+          id: true,
+          type: true,
+          category: true,
+          price: true,
+          description: true,
+          status: true,
+          images: true,
+          count: true,
+          unit: true,
+          date_from: true,
+          date_to: true,
+          expiry_date: true,
+          created_at: true,
+          owner: safeUserSelect,
+        },
+      },
+      order: { created_at: 'DESC' },
+      skip,
+      take: limitNum,
+    });
+
+    return {
+      applications,
+      total,
+      page: pageNum,
+      limit: limitNum,
+    };
+  }
+
+  /**
    * Get user's applications with pagination
    */
   async findMyApplications(
@@ -480,13 +555,14 @@ export class ApplicationsService {
   }
 
   /**
-   * Approve application
+   * Approve application (announcement owner or admin). Returns the updated application.
    */
   async approve(
     announcementId: string,
     applicationId: string,
-    userId: string
-  ): Promise<void> {
+    userId: string,
+    userType?: string,
+  ): Promise<Application> {
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
     });
@@ -495,7 +571,8 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId) {
       throw new ForbiddenException('You can only approve applications for your own announcements');
     }
 
@@ -526,7 +603,7 @@ export class ApplicationsService {
 
     // Update application status
     application.status = ApplicationStatus.APPROVED;
-    await this.applicationRepository.save(application);
+    const updated = await this.applicationRepository.save(application);
 
     // Note: available_quantity is automatically recalculated by database trigger
 
@@ -552,16 +629,19 @@ export class ApplicationsService {
     } catch (error) {
       this.logger.error('Failed to send notification:', error);
     }
+
+    return this.findOne(applicationId);
   }
 
   /**
-   * Reject application
+   * Reject application (announcement owner or admin). Returns the updated application.
    */
   async reject(
     announcementId: string,
     applicationId: string,
-    userId: string
-  ): Promise<void> {
+    userId: string,
+    userType?: string,
+  ): Promise<Application> {
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
     });
@@ -570,7 +650,8 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId) {
       throw new ForbiddenException('Only the announcement owner can reject this application');
     }
 
@@ -612,16 +693,19 @@ export class ApplicationsService {
     } catch (error) {
       this.logger.error('Failed to send notification:', error);
     }
+
+    return this.findOne(applicationId);
   }
 
   /**
-   * Update application status (with transition validation)
+   * Update application status (with transition validation). Allowed for announcement owner or admin.
    */
   async updateStatus(
     announcementId: string,
     applicationId: string,
     newStatus: ApplicationStatus,
     userId: string,
+    userType?: string,
   ): Promise<Application> {
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
@@ -631,7 +715,8 @@ export class ApplicationsService {
       throw new NotFoundException('Announcement not found');
     }
 
-    if (announcement.owner_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId) {
       throw new ForbiddenException('You can only update applications for your own announcements');
     }
 
@@ -680,18 +765,19 @@ export class ApplicationsService {
       `Updated application ${applicationId} status from ${application.status} to ${newStatus}`,
     );
 
-    return updated;
+    return this.findOne(applicationId);
   }
 
   /**
    * Close application. Allowed for:
-   * - Announcement owner (announcer): closes the application.
-   * - Application owner (applicant): closes/cancels their own application (only when PENDING).
+   * - Admin or announcement owner (announcer): closes the application.
+   * - Application owner (applicant): closes their own application (only when PENDING).
    */
   async close(
     announcementId: string,
     applicationId: string,
     userId: string,
+    userType?: string,
   ): Promise<Application> {
     const announcement = await this.announcementRepository.findOne({
       where: { id: announcementId },
@@ -708,11 +794,12 @@ export class ApplicationsService {
       throw new NotFoundException('Application not found');
     }
 
+    const isAdmin = userType === UserType.ADMIN;
     const isAnnouncementOwner = announcement.owner_id === userId;
     const isApplicationOwner = application.applicant_id === userId;
 
-    if (isAnnouncementOwner) {
-      return this.updateStatus(announcementId, applicationId, ApplicationStatus.CLOSED, userId);
+    if (isAdmin || isAnnouncementOwner) {
+      return this.updateStatus(announcementId, applicationId, ApplicationStatus.CLOSED, userId, userType);
     }
 
     if (isApplicationOwner) {
@@ -722,19 +809,19 @@ export class ApplicationsService {
         );
       }
       application.status = ApplicationStatus.CLOSED;
-      const updated = await this.applicationRepository.save(application);
+      await this.applicationRepository.save(application);
       this.logger.log(`Application ${applicationId} closed by applicant`);
-      return updated;
+      return this.findOne(applicationId);
     }
 
     throw new ForbiddenException('Only the announcement owner or the application owner can close this application');
   }
 
   /**
-   * Cancel application. Only the application owner (applicant) can cancel.
+   * Cancel application. Application owner (applicant) or admin can cancel.
    * Allowed when status is PENDING or APPROVED. Sets status to CANCELED.
    */
-  async cancel(applicationId: string, userId: string): Promise<Application> {
+  async cancel(applicationId: string, userId: string, userType?: string): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id: applicationId },
       relations: ['announcement', 'announcement.item'],
@@ -742,7 +829,8 @@ export class ApplicationsService {
     if (!application) {
       throw new NotFoundException('Application not found');
     }
-    if (application.applicant_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && application.applicant_id !== userId) {
       throw new ForbiddenException('Only the application owner can cancel this application');
     }
     this.validateStatusTransition(application.status, ApplicationStatus.CANCELED);
@@ -771,7 +859,7 @@ export class ApplicationsService {
     }
 
     this.logger.log(`Application ${applicationId} canceled by applicant`);
-    return updated;
+    return this.findOne(applicationId);
   }
 }
 

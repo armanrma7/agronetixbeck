@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { AnnouncementFavorite } from '../entities/announcement-favorite.entity';
 import { Announcement, AnnouncementStatus } from '../entities/announcement.entity';
+import { Application } from '../entities/application.entity';
 import { Region } from '../entities/region.entity';
 import { Village } from '../entities/village.entity';
 import { StorageService } from '../storage/storage.service';
@@ -20,6 +21,8 @@ export class FavoritesService {
     private favoriteRepository: Repository<AnnouncementFavorite>,
     @InjectRepository(Announcement)
     private announcementRepository: Repository<Announcement>,
+    @InjectRepository(Application)
+    private applicationRepository: Repository<Application>,
     @InjectRepository(Region)
     private regionRepository: Repository<Region>,
     @InjectRepository(Village)
@@ -143,8 +146,43 @@ export class FavoritesService {
   }
 
   /**
+   * Get all favorites (all users). Admin only.
+   * Returns only published announcements, enriched with signed URLs and regions/villages.
+   */
+  async findAllForAdmin(): Promise<Announcement[]> {
+    const favorites = await this.favoriteRepository.find({
+      relations: [
+        'announcement',
+        'announcement.owner',
+        'announcement.group',
+        'announcement.item',
+      ],
+      order: { created_at: 'DESC' },
+    });
+
+    const publishedAnnouncements = favorites
+      .map((f) => f.announcement)
+      .filter((a) => a && a.status === AnnouncementStatus.PUBLISHED);
+
+    if (publishedAnnouncements.length === 0) {
+      return [];
+    }
+
+    const enrichedPromises = publishedAnnouncements.map(async (announcement) => {
+      const withUrls = await this.enrichWithSignedUrls(announcement);
+      const withRegions = await this.resolveRegionsAndVillages(withUrls);
+      return { ...(withRegions as any), applications: [] } as Announcement & { applications: Application[] };
+    });
+
+    return Promise.all(enrichedPromises);
+  }
+
+  /**
    * Get all favorites for a user
-   * Returns only published announcements, enriched with signed URLs and regions/villages
+   * Returns only published announcements, enriched with:
+   * - signed URLs
+   * - regions/villages data
+   * - applications of the current user for each announcement
    */
   async findAll(userId: string): Promise<Announcement[]> {
     const favorites = await this.favoriteRepository.find({
@@ -162,13 +200,52 @@ export class FavoritesService {
     const publishedAnnouncements = favorites
       .map((favorite) => favorite.announcement)
       .filter(
-        (announcement) => announcement && announcement.status === AnnouncementStatus.PUBLISHED
+        (announcement) => announcement && announcement.status === AnnouncementStatus.PUBLISHED,
       );
 
-    // Enrich announcements with signed URLs and regions/villages
+    if (publishedAnnouncements.length === 0) {
+      return [];
+    }
+
+    const announcementIds = publishedAnnouncements.map((a) => a.id);
+
+    // Load applications for these announcements belonging to the current user
+    const applications = await this.applicationRepository.find({
+      where: {
+        announcement_id: In(announcementIds),
+        applicant_id: userId,
+      },
+      select: [
+        'id',
+        'announcement_id',
+        'applicant_id',
+        'count',
+        'delivery_dates',
+        'notes',
+        'status',
+        'created_at',
+        'updated_at',
+      ],
+      order: { created_at: 'DESC' },
+    });
+
+    const appsByAnnouncement = new Map<string, Application[]>();
+    for (const app of applications) {
+      const list = appsByAnnouncement.get(app.announcement_id) || [];
+      list.push(app);
+      appsByAnnouncement.set(app.announcement_id, list);
+    }
+
+    // Enrich announcements with signed URLs, regions/villages, and applications
     const enrichedPromises = publishedAnnouncements.map(async (announcement) => {
       const withUrls = await this.enrichWithSignedUrls(announcement);
-      return this.resolveRegionsAndVillages(withUrls);
+      const withRegions = await this.resolveRegionsAndVillages(withUrls);
+      const userApplications = appsByAnnouncement.get(announcement.id) || [];
+
+      return {
+        ...(withRegions as any),
+        applications: userApplications,
+      } as Announcement & { applications: Application[] };
     });
 
     return Promise.all(enrichedPromises);
