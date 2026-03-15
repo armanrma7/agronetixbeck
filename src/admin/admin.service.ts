@@ -84,6 +84,9 @@ export class AdminService {
     if (dto.is_locked !== undefined) {
       user.is_locked = dto.is_locked;
     }
+    if (dto.verified !== undefined) {
+      user.verified = dto.verified;
+    }
 
     const saved = await this.userRepository.save(user);
     const { password: _pw, ...userWithoutPassword } = saved;

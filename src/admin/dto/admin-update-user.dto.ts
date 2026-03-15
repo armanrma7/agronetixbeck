@@ -17,5 +17,10 @@ export class AdminUpdateUserDto {
   @IsOptional()
   @IsBoolean()
   is_locked?: boolean;
+
+  @ApiPropertyOptional({ description: 'Set verified status (e.g. verify/reject account)' })
+  @IsOptional()
+  @IsBoolean()
+  verified?: boolean;
 }
 

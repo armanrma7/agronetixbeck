@@ -82,7 +82,7 @@ export class AdminController {
 
   @Patch('users/:id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Admin: update user type/status/lock' })
+  @ApiOperation({ summary: 'Admin: update user (type, status, lock, verified)' })
   @ApiResponse({
     status: 200,
     description: 'User updated successfully',

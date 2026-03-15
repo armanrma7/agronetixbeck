@@ -1373,13 +1373,13 @@ export class AnnouncementsService {
   }
 
   /**
-   * Cancel announcement (owner action)
+   * Cancel announcement (owner or admin)
    */
-  async cancel(id: string, userId: string): Promise<Announcement> {
+  async cancel(id: string, userId: string, userType?: string): Promise<Announcement> {
     const announcement = await this.findOne(id);
 
-    // Check ownership
-    if (announcement.owner_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId) {
       throw new ForbiddenException('You can only cancel your own announcements');
     }
 
@@ -1417,13 +1417,13 @@ export class AnnouncementsService {
   }
 
   /**
-   * Delete announcement (soft delete by marking as canceled)
+   * Delete announcement (soft delete by marking as canceled). Owner or admin.
    */
-  async remove(id: string, userId: string): Promise<void> {
+  async remove(id: string, userId: string, userType?: string): Promise<void> {
     const announcement = await this.findOne(id);
 
-    // Check ownership
-    if (announcement.owner_id !== userId) {
+    const isAdmin = userType === UserType.ADMIN;
+    if (!isAdmin && announcement.owner_id !== userId) {
       throw new ForbiddenException('You can only delete your own announcements');
     }
 

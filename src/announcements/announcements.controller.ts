@@ -844,18 +844,18 @@ export class AnnouncementsController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerGuard)
+  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Cancel announcement (owner only)' })
+  @ApiOperation({ summary: 'Cancel announcement (owner or admin)' })
   @ApiResponse({
     status: 200,
     description: 'Announcement canceled successfully',
   })
   @ApiResponse({ status: 400, description: 'Announcement cannot be canceled' })
-  @ApiResponse({ status: 403, description: 'Not the owner' })
+  @ApiResponse({ status: 403, description: 'Not the owner or admin' })
   async cancel(@Param('id') id: string, @Request() req) {
-    const announcement = await this.announcementsService.cancel(id, req.user.id);
+    const announcement = await this.announcementsService.cancel(id, req.user.id, req.user.user_type);
     return { 
       message: 'Announcement canceled successfully',
       announcement,
@@ -863,17 +863,17 @@ export class AnnouncementsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerGuard)
+  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete announcement (owner only, soft delete)' })
+  @ApiOperation({ summary: 'Delete announcement (owner or admin, soft delete)' })
   @ApiResponse({
     status: 204,
     description: 'Announcement deleted successfully',
   })
-  @ApiResponse({ status: 403, description: 'Not the owner or announcement is published' })
+  @ApiResponse({ status: 403, description: 'Not the owner or admin, or announcement is published' })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
   async remove(@Param('id') id: string, @Request() req) {
-    await this.announcementsService.remove(id, req.user.id);
+    await this.announcementsService.remove(id, req.user.id, req.user.user_type);
   }
 }
