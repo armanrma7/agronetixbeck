@@ -355,6 +355,16 @@ export class AnnouncementsController {
     const effectiveOwnerId =
       isAdmin || !owner_id || owner_id === currentUserId ? owner_id : undefined;
 
+    // IMPORTANT: Include user's own announcements when listing published announcements.
+    // Previously we excluded them to make a "feed", but requirement is to return owner's published announcements too.
+    const effectiveExcludeOwnerId =
+      !isAdmin &&
+      currentUserId &&
+      status !== AnnouncementStatus.PUBLISHED &&
+      status !== undefined
+        ? currentUserId
+        : undefined;
+
     return this.announcementsService.findAll({
       category: categories,
       type,
@@ -369,7 +379,7 @@ export class AnnouncementsController {
       created_to,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
-      excludeOwnerId: currentUserId,
+      excludeOwnerId: effectiveExcludeOwnerId,
       isAdmin,
       ownerId: effectiveOwnerId,
     });

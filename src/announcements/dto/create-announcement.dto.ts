@@ -83,13 +83,10 @@ export class CreateAnnouncementDto {
   @Min(0.01, { message: 'Daily limit must be > 0.' })
   daily_limit?: number;
 
-  // Unit is optional for all categories
-  @ApiProperty({ enum: Unit, required: false, example: Unit.KG })
-  @IsOptional()
-  @IsEnum(Unit, {
-    message: 'Select a valid measurement unit.',
-  })
-  unit?: Unit;
+  // Unit is required (validated against DB enum in service)
+  @ApiProperty({ required: true, description: 'Required. Value must exist in DB enum unit_enum.' })
+  @IsString()
+  unit: string;
 
   // Images optional for all categories (max 3)
   @ApiProperty({ 
@@ -124,10 +121,10 @@ export class CreateAnnouncementDto {
   min_area?: number;
 
   // For category = 'rent': price per unit (optional; e.g. per hour, per day)
-  @ApiProperty({ enum: RentUnit, required: false, description: 'Rent price unit (hour, day, week, month, year)' })
+  @ApiProperty({ required: false, description: 'Optional. Value must exist in DB enum rent_unit_enum.' })
   @IsOptional()
-  @IsEnum(RentUnit, { message: 'rent_unit must be one of: hour, day, week, month, year.' })
-  rent_unit?: RentUnit;
+  @IsString()
+  rent_unit?: string;
 
   // ====================================
   // LOCATION FIELDS

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { 
   Announcement, 
   AnnouncementStatus, 
@@ -35,6 +35,9 @@ import { getMessage } from '../messages';
 @Injectable()
 export class AnnouncementsService {
   private readonly logger = new Logger(AnnouncementsService.name);
+  private unitEnumValuesCache: Set<string> | null = null;
+  private rentUnitEnumValuesCache: Set<string> | null = null;
+  private enumLoading: Record<string, Promise<Set<string>> | undefined> = {};
 
   constructor(
     @InjectRepository(Announcement)
@@ -53,6 +56,7 @@ export class AnnouncementsService {
     private announcementViewRepository: Repository<AnnouncementView>,
     @InjectRepository(Application)
     private applicationRepository: Repository<Application>,
+    private dataSource: DataSource,
     private fcmService: FcmService,
     private deviceTokenService: DeviceTokenService,
     private notificationService: NotificationService,
@@ -264,26 +268,66 @@ export class AnnouncementsService {
     return date;
   }
 
-  /** Only allow valid Unit enum values; invalid or unknown (e.g. "unit") become null.
-   * Also normalizes common synonyms such as "m²" / "mÂ²" → "m2".
-   */
-  private normalizeUnit(value: unknown): Unit | null {
-    if (value == null || value === '') return null;
-    let s = String(value).toLowerCase().trim();
-
-    // Normalize known alternatives
-    if (s === 'm²' || s === 'mÂ²') {
-      s = 'm2';
-    }
-
-    return Object.values(Unit).includes(s as Unit) ? (s as Unit) : null;
+  private async getDbEnumValues(enumTypeName: string): Promise<Set<string>> {
+    const rows: Array<{ enumlabel: string }> = await this.dataSource.query(
+      `
+      SELECT e.enumlabel
+      FROM pg_type t
+      JOIN pg_enum e ON t.oid = e.enumtypid
+      WHERE t.typname = $1
+      ORDER BY e.enumsortorder
+      `,
+      [enumTypeName],
+    );
+    return new Set((rows || []).map((r) => String(r.enumlabel)));
   }
 
-  /** Only allow valid RentUnit enum values; invalid become null. */
-  private normalizeRentUnit(value: unknown): RentUnit | null {
+  private async getEnumCached(enumTypeName: string): Promise<Set<string>> {
+    if (enumTypeName === 'unit_enum' && this.unitEnumValuesCache) return this.unitEnumValuesCache;
+    if (enumTypeName === 'rent_unit_enum' && this.rentUnitEnumValuesCache) return this.rentUnitEnumValuesCache;
+
+    if (!this.enumLoading[enumTypeName]) {
+      this.enumLoading[enumTypeName] = this.getDbEnumValues(enumTypeName).then((set) => {
+        if (enumTypeName === 'unit_enum') this.unitEnumValuesCache = set;
+        if (enumTypeName === 'rent_unit_enum') this.rentUnitEnumValuesCache = set;
+        return set;
+      });
+    }
+    return this.enumLoading[enumTypeName]!;
+  }
+
+  /** Unit is REQUIRED and must match DB enum `unit_enum` (never silently null). */
+  private async normalizeUnitRequired(value: unknown): Promise<Unit> {
+    if (value == null || String(value).trim() === '') {
+      throw new BadRequestException('unit is required');
+    }
+    let s = String(value).toLowerCase().trim();
+    if (s === 'm²' || s === 'mÂ²') s = 'm2';
+
+    const allowed = await this.getEnumCached('unit_enum');
+    if (!allowed.has(s)) {
+      throw new BadRequestException('Invalid unit');
+    }
+    return s as Unit;
+  }
+
+  /** Unit optional; if provided must be valid. */
+  private async normalizeUnitOptional(value: unknown): Promise<Unit | null> {
+    if (value == null || value === '') return null;
+    return this.normalizeUnitRequired(value);
+  }
+
+  /** rent_unit optional; if provided must be valid (never silently null). */
+  private async normalizeRentUnitOptional(value: unknown): Promise<RentUnit | null> {
     if (value == null || value === '') return null;
     const s = String(value).toLowerCase().trim();
-    return Object.values(RentUnit).includes(s as RentUnit) ? (s as RentUnit) : null;
+    const allowed = await this.getEnumCached('rent_unit_enum');
+    if (!allowed.has(s)) {
+      throw new BadRequestException(
+        'Invalid rent_unit',
+      );
+    }
+    return s as RentUnit;
   }
 
   /**
@@ -460,13 +504,13 @@ export class AnnouncementsService {
       count: createDto.count ?? null,
       // For goods: daily_limit optional, others: NULL
       daily_limit: createDto.category === AnnouncementCategory.GOODS ? (createDto.daily_limit || null) : null,
-      unit: this.normalizeUnit(createDto.unit),
+      unit: await this.normalizeUnitRequired(createDto.unit),
       images: createDto.images || [],
       // date_from / date_to: optional for all announcement types
       date_from: createDto.date_from ? this.parseDate(createDto.date_from) : null,
       date_to: createDto.date_to ? this.parseDate(createDto.date_to) : null,
       min_area: createDto.min_area || null,
-      rent_unit: this.normalizeRentUnit(createDto.rent_unit),
+      rent_unit: await this.normalizeRentUnitOptional(createDto.rent_unit),
       regions: createDto.regions || [],
       villages: createDto.villages || [],
       available_quantity: createDto.category === AnnouncementCategory.GOODS ? (createDto.count || 0) : 0,
@@ -474,23 +518,6 @@ export class AnnouncementsService {
     });
 
     const savedAnnouncement = await this.announcementRepository.save(announcement);
-
-    // Notify owner: created, awaiting verification (using centralized messages)
-    try {
-      await this.notificationService.create({
-        user_id: userId,
-        type: NotificationType.ANNOUNCEMENT_CREATED,
-        title: getMessage('announcements.createdVerificationNeeded', 'en'),
-        body: getMessage('announcements.createdVerificationNeeded', 'en'),
-        data: {
-          announcement_id: savedAnnouncement.id,
-          messageKey: 'announcements.createdVerificationNeeded',
-        },
-        sendPush: true,
-      });
-    } catch (error) {
-      this.logger.warn(`Failed to send created notification for announcement ${savedAnnouncement.id}: ${error.message}`);
-    }
 
     // Load relations for response
     const fullAnnouncement = await this.findOne(savedAnnouncement.id);
@@ -1133,12 +1160,12 @@ export class AnnouncementsService {
     // Remove status from update fields (should not be updated here)
     delete updatedFields.status;
 
-    // Normalize enum fields so invalid values (e.g. "unit") become null and never hit the DB
+    // Normalize enum fields and validate against DB enums (never silently null)
     if (updateDto.unit !== undefined) {
-      updatedFields.unit = this.normalizeUnit(updateDto.unit);
+      updatedFields.unit = await this.normalizeUnitOptional(updateDto.unit);
     }
     if (updateDto.rent_unit !== undefined) {
-      updatedFields.rent_unit = this.normalizeRentUnit(updateDto.rent_unit);
+      updatedFields.rent_unit = await this.normalizeRentUnitOptional(updateDto.rent_unit);
     }
     
     // Handle date fields safely

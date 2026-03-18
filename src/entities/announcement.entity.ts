@@ -41,6 +41,11 @@ export enum Unit {
   BAG = 'bag',
   M2 = 'm2',
   HA = 'ha',
+  DAY = 'day',
+  HOUR = 'hour',
+  WEEK = 'week',
+  MONTH = 'month',
+  YEAR = 'year',
 }
 
 /** For category = 'rent': price per unit (optional; e.g. per hour, per day) */

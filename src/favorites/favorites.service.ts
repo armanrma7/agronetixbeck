@@ -235,7 +235,6 @@ export class FavoritesService {
       list.push(app);
       appsByAnnouncement.set(app.announcement_id, list);
     }
-
     // Enrich announcements with signed URLs, regions/villages, and applications
     const enrichedPromises = publishedAnnouncements.map(async (announcement) => {
       const withUrls = await this.enrichWithSignedUrls(announcement);
