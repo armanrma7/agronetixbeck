@@ -34,18 +34,22 @@ export enum AnnouncementStatus {
 }
 
 export enum Unit {
-  KG = 'kg',
-  TON = 'ton',
-  PCS = 'pcs',
-  LITER = 'liter',
-  BAG = 'bag',
-  M2 = 'm2',
-  HA = 'ha',
-  DAY = 'day',
+  KG   = 'kg',
+  T    = 't',
+  LT   = 'lt',
+  UN   = 'un',
+  PK   = 'pk',
+  BDL  = 'bdl',
+  BOX  = 'box',
+  M2   = 'm2',
+  M3   = 'm3',
+  HA   = 'ha',
+  DAY  = 'day',
   HOUR = 'hour',
-  WEEK = 'week',
   MONTH = 'month',
   YEAR = 'year',
+  TREE = 'tree',
+  BED  = 'bed',
 }
 
 /** For category = 'rent': price per unit (optional; e.g. per hour, per day) */
