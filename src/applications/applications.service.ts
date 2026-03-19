@@ -204,15 +204,6 @@ export class ApplicationsService {
       if (!createDto.count || createDto.count <= 0) {
         throw new BadRequestException('Count is required and must be greater than 0 for goods announcements');
       }
-      
-      // Check available quantity (coerce to number: DB decimal can return string)
-      const availableQuantity = Number(announcement.available_quantity) || 0;
-      const requestedCount = Number(createDto.count) || 0;
-      if (requestedCount > availableQuantity) {
-        throw new BadRequestException(
-          `Count cannot exceed available amount (${availableQuantity})`
-        );
-      }
     } else {
       // For non-goods announcements, count should be null
       if (createDto.count !== undefined && createDto.count !== null) {
@@ -346,14 +337,7 @@ export class ApplicationsService {
 
     if (updateDto.count !== undefined) {
       if (announcement.category === AnnouncementCategory.GOODS) {
-        const availableQuantity = Number(announcement.available_quantity ?? 0);
-        const requestedCount = Number(updateDto.count);
-        if (requestedCount > availableQuantity) {
-          throw new BadRequestException(
-            `Count cannot exceed available quantity (${availableQuantity})`,
-          );
-        }
-        application.count = requestedCount;
+        application.count = Number(updateDto.count);
       } else {
         application.count = null;
       }
@@ -588,24 +572,9 @@ export class ApplicationsService {
     // Validate status transition
     this.validateStatusTransition(application.status, ApplicationStatus.APPROVED);
 
-    // Check available quantity from database (for goods category)
-    // Coerce to number: TypeORM/Postgres decimal columns can return strings
-    if (announcement.category === AnnouncementCategory.GOODS) {
-      const availableQuantity = Number(announcement.available_quantity) || 0;
-      const requestedCount = Number(application.count) || 0;
-
-      if (requestedCount > availableQuantity) {
-        throw new BadRequestException(
-          `Cannot approve: requested count (${requestedCount}) exceeds available (${availableQuantity})`
-        );
-      }
-    }
-
     // Update application status
     application.status = ApplicationStatus.APPROVED;
     const updated = await this.applicationRepository.save(application);
-
-    // Note: available_quantity is automatically recalculated by database trigger
 
     // Notify only the applicant (owner of the application; no one else)
     try {

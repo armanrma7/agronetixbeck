@@ -382,6 +382,7 @@ export class AnnouncementsController {
       excludeOwnerId: effectiveExcludeOwnerId,
       isAdmin,
       ownerId: effectiveOwnerId,
+      currentUserId,
     });
   }
 
@@ -562,6 +563,7 @@ export class AnnouncementsController {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       excludeOwnerId: req?.user?.id,
+      currentUserId: req?.user?.id,
     });
   }
 
@@ -632,8 +634,9 @@ export class AnnouncementsController {
   })
   @ApiResponse({ status: 400, description: 'Invalid announcement ID (must be a valid UUID)' })
   @ApiResponse({ status: 404, description: 'Announcement not found' })
-  async findOne(@Param('id', new ParseUUIDPipe()) id: string) {
-    return this.announcementsService.findOne(id);
+  async findOne(@Param('id', new ParseUUIDPipe()) id: string, @Request() req?: any) {
+    const currentUserId = req?.user?.id;
+    return this.announcementsService.findOne(id, currentUserId);
   }
 
   @Patch(':id')

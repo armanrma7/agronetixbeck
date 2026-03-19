@@ -133,10 +133,6 @@ export class Announcement {
   @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
   daily_limit: number | null;
 
-  // Available quantity (calculated field for goods)
-  @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
-  available_quantity: number;
-
   // Unit is optional for all categories
   @Column({
     type: 'enum',

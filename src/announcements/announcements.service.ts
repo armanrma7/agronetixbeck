@@ -23,6 +23,7 @@ import { Region } from '../entities/region.entity';
 import { Village } from '../entities/village.entity';
 import { AnnouncementView } from '../entities/announcement-view.entity';
 import { Application, ApplicationStatus } from '../entities/application.entity';
+import { AnnouncementFavorite } from '../entities/announcement-favorite.entity';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
 import { FcmService } from '../notifications/fcm.service';
@@ -56,6 +57,8 @@ export class AnnouncementsService {
     private announcementViewRepository: Repository<AnnouncementView>,
     @InjectRepository(Application)
     private applicationRepository: Repository<Application>,
+    @InjectRepository(AnnouncementFavorite)
+    private favoriteRepository: Repository<AnnouncementFavorite>,
     private dataSource: DataSource,
     private fcmService: FcmService,
     private deviceTokenService: DeviceTokenService,
@@ -63,6 +66,51 @@ export class AnnouncementsService {
     private storageService: StorageService,
     private configService: ConfigService,
   ) {}
+
+  /**
+   * Attach isFavorite and isApplied (has pending application) to a list of announcements for the given user.
+   * If currentUserId is undefined, both flags are false.
+   */
+  private async attachUserFlags(
+    announcements: Announcement[],
+    currentUserId?: string,
+  ): Promise<Announcement[]> {
+    if (!currentUserId || announcements.length === 0) {
+      for (const a of announcements) {
+        (a as any).isFavorite = false;
+        (a as any).isApplied = false;
+      }
+      return announcements;
+    }
+
+    const ids = announcements.map((a) => a.id);
+
+    const [favorites, pendingApps] = await Promise.all([
+      this.favoriteRepository.find({
+        where: { user_id: currentUserId, announcement_id: In(ids) },
+        select: ['announcement_id'],
+      }),
+      this.applicationRepository.find({
+        where: {
+          applicant_id: currentUserId,
+          announcement_id: In(ids),
+          status: ApplicationStatus.PENDING,
+        },
+        select: ['announcement_id'],
+        withDeleted: false,
+      }),
+    ]);
+
+    const favoriteIds = new Set(favorites.map((f) => f.announcement_id));
+    const appliedIds = new Set(pendingApps.map((a) => a.announcement_id));
+
+    for (const a of announcements) {
+      (a as any).isFavorite = favoriteIds.has(a.id);
+      (a as any).isApplied = appliedIds.has(a.id);
+    }
+
+    return announcements;
+  }
 
   /**
    * Resolve applications count and data for an announcement
@@ -97,7 +145,8 @@ export class AnnouncementsService {
   }
 
   /**
-   * Resolve applications count for multiple announcements
+   * Resolve applications count (only) for multiple announcements used in list responses.
+   * Full applications array is intentionally excluded from list endpoints.
    */
   private async resolveApplicationsForAnnouncements(announcements: Announcement[]): Promise<Announcement[]> {
     if (announcements.length === 0) {
@@ -105,43 +154,21 @@ export class AnnouncementsService {
     }
 
     const announcementIds = announcements.map(a => a.id);
-    
-    // Get all applications for these announcements
-    const applications = await this.applicationRepository.find({
-      where: { announcement_id: In(announcementIds) },
-      relations: ['applicant'],
-      select: {
-        id: true,
-        announcement_id: true,
-        applicant_id: true,
-        count: true,
-        delivery_dates: true,
-        notes: true,
-        status: true,
-        created_at: true,
-        updated_at: true,
-        applicant: {
-          id: true,
-          full_name: true,
-        },
-      },
-      order: { created_at: 'DESC' },
-      withDeleted: false,
-    });
 
-    // Group applications by announcement_id
-    const applicationsByAnnouncement = new Map<string, Application[]>();
-    for (const app of applications) {
-      const apps = applicationsByAnnouncement.get(app.announcement_id) || [];
-      apps.push(app);
-      applicationsByAnnouncement.set(app.announcement_id, apps);
-    }
+    const counts: { announcement_id: string; count: string }[] = await this.applicationRepository
+      .createQueryBuilder('application')
+      .select('application.announcement_id', 'announcement_id')
+      .addSelect('COUNT(*)', 'count')
+      .where('application.announcement_id IN (:...ids)', { ids: announcementIds })
+      .groupBy('application.announcement_id')
+      .getRawMany();
 
-    // Attach applications count and data to each announcement
+    const countMap = new Map<string, number>(
+      counts.map((r) => [r.announcement_id, Number(r.count)]),
+    );
+
     for (const announcement of announcements) {
-      const apps = applicationsByAnnouncement.get(announcement.id) || [];
-      (announcement as any).applications_count = apps.length;
-      (announcement as any).applications = apps;
+      (announcement as any).applications_count = countMap.get(announcement.id) ?? 0;
     }
 
     return announcements;
@@ -367,8 +394,8 @@ export class AnnouncementsService {
     if (dto.date_from?.trim() && dto.date_to?.trim()) {
       const dateFrom = this.parseDate(dto.date_from);
       const dateTo = this.parseDate(dto.date_to);
-      if (dateFrom && dateTo && dateFrom >= dateTo) {
-        throw new BadRequestException('date_from must be before date_to');
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        throw new BadRequestException('date_from cannot be after date_to');
       }
     }
   }
@@ -513,7 +540,6 @@ export class AnnouncementsService {
       rent_unit: await this.normalizeRentUnitOptional(createDto.rent_unit),
       regions: createDto.regions || [],
       villages: createDto.villages || [],
-      available_quantity: createDto.category === AnnouncementCategory.GOODS ? (createDto.count || 0) : 0,
       expiry_date: expiryDate,
     });
 
@@ -551,6 +577,7 @@ export class AnnouncementsService {
     excludeOwnerId?: string;
     isAdmin?: boolean;
     ownerId?: string;
+    currentUserId?: string;
   }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     // Validate status enum if provided
     if (params.status) {
@@ -705,8 +732,11 @@ export class AnnouncementsService {
     // Resolve applications count and data for each announcement
     const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
 
+    // Attach isFavorite and isApplied per user
+    const withFlags = await this.attachUserFlags(withApplications, params.currentUserId);
+
     return {
-      announcements: withApplications,
+      announcements: withFlags,
       total,
       page,
       limit,
@@ -722,6 +752,7 @@ export class AnnouncementsService {
     page?: number;
     limit?: number;
     excludeOwnerId?: string;
+    currentUserId?: string;
   }): Promise<{ announcements: Announcement[]; total: number; page: number; limit: number }> {
     const trimmed = (params.q || '').trim();
     const page = Math.max(1, params.page || 1);
@@ -762,13 +793,14 @@ export class AnnouncementsService {
       .getManyAndCount();
 
     const enriched = await this.enrichAnnouncementsWithSignedUrls(announcements);
-    return { announcements: enriched, total, page, limit };
+    const withFlags = await this.attachUserFlags(enriched, params.currentUserId);
+    return { announcements: withFlags, total, page, limit };
   }
 
   /**
    * Get announcement by ID
    */
-  async findOne(id: string): Promise<Announcement> {
+  async findOne(id: string, currentUserId?: string): Promise<Announcement> {
     const announcement = await this.announcementRepository
       .createQueryBuilder('announcement')
       .leftJoin('announcement.owner', 'owner')
@@ -823,7 +855,11 @@ export class AnnouncementsService {
     const withRegions = await this.resolveRegionsAndVillages(withUrls);
     
     // Resolve applications count and data
-    return this.resolveApplications(withRegions);
+    const withApplications = await this.resolveApplications(withRegions);
+
+    // Attach isFavorite and isApplied
+    const [enriched] = await this.attachUserFlags([withApplications], currentUserId);
+    return enriched;
   }
 
   /**
@@ -968,8 +1004,11 @@ export class AnnouncementsService {
     // Resolve applications count and data for each announcement (batch query - already optimized)
     const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
 
+    // Attach isFavorite and isApplied for the owner viewing their own announcements
+    const withFlags = await this.attachUserFlags(withApplications, userId);
+
     return {
-      announcements: withApplications,
+      announcements: withFlags,
       total,
       page,
       limit,
@@ -1007,7 +1046,6 @@ export class AnnouncementsService {
           status: true,
           count: true,
           daily_limit: true,
-          available_quantity: true,
           unit: true,
           images: true,
           date_from: true,
@@ -1065,7 +1103,10 @@ export class AnnouncementsService {
       enrichedAnnouncements.map(ann => this.resolveRegionsAndVillages(ann))
     );
 
-    return withRegions;
+    // Attach isFavorite and isApplied
+    const withFlags = await this.attachUserFlags(withRegions, userId);
+
+    return withFlags;
   }
 
   /**
@@ -1091,11 +1132,13 @@ export class AnnouncementsService {
     // - Admin: can update anything regardless of status
     if (!isAdmin && announcement.status === AnnouncementStatus.PUBLISHED) {
       const allowedFields = ['expiry_date'];
-      const updateFields = Object.keys(updateDto).filter(key => updateDto[key] !== undefined);
-      const disallowedFields = updateFields.filter(field => !allowedFields.includes(field));
+      const updateFields = Object.keys(updateDto).filter(
+        (key) => updateDto[key] !== undefined && key !== 'status',
+      );
+      const disallowedFields = updateFields.filter((field) => !allowedFields.includes(field));
       if (disallowedFields.length > 0) {
         throw new ForbiddenException(
-          `Cannot update published announcements. Only expiry_date can be updated. Attempted to update: ${disallowedFields.join(', ')}`
+          `Only expiry_date can be updated on a published announcement. Attempted: ${disallowedFields.join(', ')}`,
         );
       }
     }
@@ -1109,8 +1152,8 @@ export class AnnouncementsService {
         ? this.parseDate(updateDto.date_to) 
         : announcement.date_to;
       
-      if (dateFrom && dateTo && dateFrom >= dateTo) {
-        throw new BadRequestException('date_from must be before date_to');
+      if (dateFrom && dateTo && dateFrom > dateTo) {
+        throw new BadRequestException('date_from cannot be after date_to');
       }
     }
 
@@ -1154,75 +1197,76 @@ export class AnnouncementsService {
       }
     }
 
-    // Update fields
-    const updatedFields: any = { ...updateDto };
-    
-    // Remove status from update fields (should not be updated here)
-    delete updatedFields.status;
-
-    // Normalize enum fields and validate against DB enums (never silently null)
-    if (updateDto.unit !== undefined) {
-      updatedFields.unit = await this.normalizeUnitOptional(updateDto.unit);
-    }
-    if (updateDto.rent_unit !== undefined) {
-      updatedFields.rent_unit = await this.normalizeRentUnitOptional(updateDto.rent_unit);
-    }
-    
-    // Handle date fields safely
-    if (updateDto.date_from !== undefined) {
-      updatedFields.date_from = this.parseDate(updateDto.date_from);
-    }
-    
-    if (updateDto.date_to !== undefined) {
-      const dateTo = this.parseDate(updateDto.date_to);
-      updatedFields.date_to = dateTo;
-      // Use end date as expiry date for rent (and any announcement with date_to)
-      if (announcement.category === AnnouncementCategory.RENT) {
-        updatedFields.expiry_date = dateTo;
+    // Validate group_id exists if being updated
+    if (updateDto.group_id !== undefined) {
+      const group = await this.categoryRepository.findOne({ where: { id: updateDto.group_id } });
+      if (!group) {
+        throw new BadRequestException(`Group with ID ${updateDto.group_id} not found`);
       }
     }
 
-    if (updateDto.expiry_date !== undefined) {
-      updatedFields.expiry_date = this.parseDate(updateDto.expiry_date);
+    // Validate item_id exists if being updated
+    if (updateDto.item_id !== undefined) {
+      const item = await this.itemRepository.findOne({ where: { id: updateDto.item_id } });
+      if (!item) {
+        throw new BadRequestException(`Item with ID ${updateDto.item_id} not found`);
+      }
     }
-    
-    Object.assign(announcement, updatedFields);
+
+    // Build a clean patch object with only the fields that were actually provided.
+    // We use repository.update() (direct SQL UPDATE) to bypass TypeORM relation
+    // tracking — otherwise loaded relation objects (group, item) override FK changes.
+    const patch: Record<string, any> = {};
+
+    if (updateDto.type      !== undefined) patch.type      = updateDto.type;
+    if (updateDto.category  !== undefined) patch.category  = updateDto.category;
+    if (updateDto.group_id  !== undefined) patch.group_id  = updateDto.group_id;
+    if (updateDto.item_id   !== undefined) patch.item_id   = updateDto.item_id;
+    if (updateDto.price     !== undefined) patch.price     = updateDto.price;
+    if (updateDto.description !== undefined) patch.description = updateDto.description;
+    if (updateDto.count     !== undefined) patch.count     = updateDto.count;
+    if (updateDto.daily_limit !== undefined) patch.daily_limit = updateDto.daily_limit;
+    if (updateDto.images    !== undefined) patch.images    = updateDto.images;
+    if (updateDto.min_area  !== undefined) patch.min_area  = updateDto.min_area;
+    if (updateDto.regions   !== undefined) patch.regions   = updateDto.regions;
+    if (updateDto.villages  !== undefined) patch.villages  = updateDto.villages;
+
+    // Validate enums against DB values
+    if (updateDto.unit !== undefined) {
+      patch.unit = await this.normalizeUnitOptional(updateDto.unit);
+    }
+    if (updateDto.rent_unit !== undefined) {
+      patch.rent_unit = await this.normalizeRentUnitOptional(updateDto.rent_unit);
+    }
+
+    // Parse date fields
+    if (updateDto.date_from !== undefined) {
+      patch.date_from = this.parseDate(updateDto.date_from);
+    }
+    if (updateDto.date_to !== undefined) {
+      const dateTo = this.parseDate(updateDto.date_to);
+      patch.date_to = dateTo;
+      const effectiveCategory = updateDto.category ?? announcement.category;
+      if (effectiveCategory === AnnouncementCategory.RENT) {
+        patch.expiry_date = dateTo;
+      }
+    }
+    if (updateDto.expiry_date !== undefined) {
+      patch.expiry_date = this.parseDate(updateDto.expiry_date);
+    }
 
     try {
-      const savedAnnouncement = await this.announcementRepository.save(announcement);
-      
-      // Reload with relations and enrich with signed URLs
-      const fullAnnouncement = await this.findOne(savedAnnouncement.id);
-      return fullAnnouncement;
+      await this.announcementRepository.update(id, patch);
     } catch (error) {
-      // Catch enum validation errors and provide a better error message
-      if (error.message && error.message.includes('invalid input value for enum')) {
-        const enumMatch = error.message.match(/enum (\w+_enum): "([^"]+)"/);
-        if (enumMatch) {
-          const enumName = enumMatch[1];
-          const invalidValue = enumMatch[2];
-          
-          // Map enum names to valid values
-          const enumValueMap: Record<string, string[]> = {
-            'announcement_status_enum': Object.values(AnnouncementStatus),
-            'announcement_type_enum': Object.values(AnnouncementType),
-            'announcement_category_enum': Object.values(AnnouncementCategory),
-            'announcement_unit_enum': Object.values(Unit),
-            'announcement_rent_unit_enum': Object.values(RentUnit),
-          };
-          
-          const validValues = enumValueMap[enumName] || [];
-          throw new BadRequestException(
-            `Invalid value "${invalidValue}" for ${enumName}. Valid values are: ${validValues.join(', ')}`
-          );
-        }
+      if (error.message?.includes('invalid input value for enum')) {
+        const enumMatch = error.message.match(/enum \w+_enum: "([^"]+)"/);
+        const invalidValue = enumMatch?.[1] ?? '';
+        throw new BadRequestException(`Invalid enum value: "${invalidValue}"`);
       }
       throw error;
     }
-    
-    // Reload with relations and enrich with signed URLs
-    const fullAnnouncement = await this.findOne(announcement.id);
-    return fullAnnouncement;
+
+    return this.findOne(id, userId);
   }
 
   /**

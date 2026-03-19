@@ -10,11 +10,31 @@ import {
   MaxLength,
   IsEnum,
   IsDateString,
-  ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
-import { Unit, RentUnit, AnnouncementStatus } from '../../entities/announcement.entity';
+import { AnnouncementType, AnnouncementCategory, AnnouncementStatus } from '../../entities/announcement.entity';
 
 export class UpdateAnnouncementDto {
+  @ApiProperty({ enum: AnnouncementType, required: false })
+  @IsOptional()
+  @IsEnum(AnnouncementType, { message: 'Type must be either sell or rent.' })
+  type?: AnnouncementType;
+
+  @ApiProperty({ enum: AnnouncementCategory, required: false })
+  @IsOptional()
+  @IsEnum(AnnouncementCategory, { message: 'Category must be goods, rent, or service.' })
+  category?: AnnouncementCategory;
+
+  @ApiProperty({ required: false, description: 'Foreign key to catalog_categories' })
+  @IsOptional()
+  @IsUUID('4', { message: 'group_id must be a valid UUID.' })
+  group_id?: string;
+
+  @ApiProperty({ required: false, description: 'Foreign key to catalog_items' })
+  @IsOptional()
+  @IsUUID('4', { message: 'item_id must be a valid UUID.' })
+  item_id?: string;
+
   @ApiProperty({ required: false, minimum: 0, example: 1500.00 })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -27,7 +47,6 @@ export class UpdateAnnouncementDto {
   @MaxLength(2000)
   description?: string;
 
-  // For goods category
   @ApiProperty({ required: false, minimum: 0.01, maximum: 999999 })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
@@ -41,20 +60,18 @@ export class UpdateAnnouncementDto {
   @Min(0.01, { message: 'Daily limit must be > 0.' })
   daily_limit?: number;
 
-  @ApiProperty({ enum: Unit, required: false })
+  @ApiProperty({ required: false, description: 'Value must exist in DB enum unit_enum.' })
   @IsOptional()
-  @IsEnum(Unit, {
-    message: 'Select a valid measurement unit.',
-  })
-  unit?: Unit;
+  @IsString()
+  unit?: string;
 
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @ArrayMaxSize(3, { message: 'Maximum 3 images allowed.' })
   images?: string[];
 
-  // For rent category
   @ApiProperty({ required: false, example: '2026-02-01' })
   @IsOptional()
   @IsDateString({}, { message: 'date_from must be a valid date (YYYY-MM-DD).' })
@@ -71,12 +88,11 @@ export class UpdateAnnouncementDto {
   @Min(0.01, { message: 'min_area must be > 0.' })
   min_area?: number;
 
-  @ApiProperty({ enum: RentUnit, required: false, description: 'Rent price unit (hour, day, week, month, year)' })
+  @ApiProperty({ required: false, description: 'Optional. Value must exist in DB enum rent_unit_enum.' })
   @IsOptional()
-  @IsEnum(RentUnit, { message: 'rent_unit must be one of: hour, day, week, month, year.' })
-  rent_unit?: RentUnit;
+  @IsString()
+  rent_unit?: string;
 
-  // Location
   @ApiProperty({ type: [String], required: false })
   @IsOptional()
   @IsArray()
@@ -98,9 +114,6 @@ export class UpdateAnnouncementDto {
   @IsDateString({}, { message: 'expiry_date must be a valid date (YYYY-MM-DD).' })
   expiry_date?: string;
 
-  // Status should not be updatable via this endpoint
-  // Status changes should use dedicated endpoints (publish, block, close, cancel)
-  // But we validate it here to provide a clear error message if someone tries
   @ApiProperty({ 
     enum: AnnouncementStatus, 
     required: false,
@@ -109,7 +122,7 @@ export class UpdateAnnouncementDto {
   })
   @IsOptional()
   @IsEnum(AnnouncementStatus, {
-    message: `Status must be one of: ${Object.values(AnnouncementStatus).join(', ')}. Status cannot be updated via this endpoint.`,
+    message: `Status cannot be updated via this endpoint. Use: /publish, /block, /close, /cancel`,
   })
   status?: AnnouncementStatus;
 }

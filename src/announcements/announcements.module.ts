@@ -12,6 +12,7 @@ import { GoodsItem } from '../entities/goods-item.entity';
 import { Region } from '../entities/region.entity';
 import { Village } from '../entities/village.entity';
 import { AnnouncementView } from '../entities/announcement-view.entity';
+import { AnnouncementFavorite } from '../entities/announcement-favorite.entity';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { StorageModule } from '../storage/storage.module';
 
@@ -26,6 +27,7 @@ import { StorageModule } from '../storage/storage.module';
       Region,
       Village,
       AnnouncementView,
+      AnnouncementFavorite,
     ]),
     NotificationsModule,
     StorageModule,
