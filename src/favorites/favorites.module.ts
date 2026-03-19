@@ -3,22 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { FavoritesController } from './favorites.controller';
 import { FavoritesService } from './favorites.service';
 import { AnnouncementFavorite } from '../entities/announcement-favorite.entity';
-import { Announcement } from '../entities/announcement.entity';
-import { Application } from '../entities/application.entity';
-import { Region } from '../entities/region.entity';
-import { Village } from '../entities/village.entity';
-import { StorageModule } from '../storage/storage.module';
+import { AnnouncementsModule } from '../announcements/announcements.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      AnnouncementFavorite,
-      Announcement,
-      Application,
-      Region,
-      Village,
-    ]),
-    StorageModule,
+    TypeOrmModule.forFeature([AnnouncementFavorite]),
+    AnnouncementsModule,
   ],
   controllers: [FavoritesController],
   providers: [FavoritesService],

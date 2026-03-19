@@ -721,11 +721,19 @@ export class AnnouncementsController {
         : updateDto.villages 
           ? [updateDto.villages] 
           : undefined,
-      // Parse numbers
-      price: updateDto.price ? Number(updateDto.price) : undefined,
-      count: updateDto.count ? Number(updateDto.count) : undefined,
-      daily_limit: updateDto.daily_limit ? Number(updateDto.daily_limit) : undefined,
-      min_area: updateDto.min_area ? Number(updateDto.min_area) : undefined,
+      // Parse numbers — treat "null", null, or "" as explicit null (clear); omitted stays undefined (no change)
+      price: updateDto.price !== undefined
+        ? (updateDto.price === null || updateDto.price === 'null' || updateDto.price === '' ? null : Number(updateDto.price))
+        : undefined,
+      count: updateDto.count !== undefined
+        ? (updateDto.count === null || updateDto.count === 'null' || updateDto.count === '' ? null : Number(updateDto.count))
+        : undefined,
+      daily_limit: updateDto.daily_limit !== undefined
+        ? (updateDto.daily_limit === null || updateDto.daily_limit === 'null' || updateDto.daily_limit === '' ? null : Number(updateDto.daily_limit))
+        : undefined,
+      min_area: updateDto.min_area !== undefined
+        ? (updateDto.min_area === null || updateDto.min_area === 'null' || updateDto.min_area === '' ? null : Number(updateDto.min_area))
+        : undefined,
     };
 
     // Validate image count (max 3)

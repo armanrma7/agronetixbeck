@@ -11,6 +11,7 @@ import {
   IsEnum,
   IsDateString,
   ArrayMaxSize,
+  ValidateIf,
 } from 'class-validator';
 import { AnnouncementType, AnnouncementCategory, AnnouncementStatus } from '../../entities/announcement.entity';
 
@@ -47,18 +48,20 @@ export class UpdateAnnouncementDto {
   @MaxLength(2000)
   description?: string;
 
-  @ApiProperty({ required: false, minimum: 0.01, maximum: 999999 })
+  @ApiProperty({ required: false, minimum: 0.01, maximum: 999999, nullable: true, description: 'Send null to clear' })
   @IsOptional()
+  @ValidateIf((o) => o.count !== null)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'Count must be > 0.' })
   @Max(999999)
-  count?: number;
+  count?: number | null;
 
-  @ApiProperty({ required: false, minimum: 0.01 })
+  @ApiProperty({ required: false, minimum: 0.01, nullable: true, description: 'Send null to clear' })
   @IsOptional()
+  @ValidateIf((o) => o.daily_limit !== null)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'Daily limit must be > 0.' })
-  daily_limit?: number;
+  daily_limit?: number | null;
 
   @ApiProperty({ required: false, description: 'Value must exist in DB enum unit_enum.' })
   @IsOptional()
@@ -82,11 +85,12 @@ export class UpdateAnnouncementDto {
   @IsDateString({}, { message: 'date_to must be a valid date (YYYY-MM-DD).' })
   date_to?: string;
 
-  @ApiProperty({ required: false, minimum: 0.01 })
+  @ApiProperty({ required: false, minimum: 0.01, nullable: true, description: 'Send null to clear' })
   @IsOptional()
+  @ValidateIf((o) => o.min_area !== null)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01, { message: 'min_area must be > 0.' })
-  min_area?: number;
+  min_area?: number | null;
 
   @ApiProperty({ required: false, description: 'Optional. Value must exist in DB enum rent_unit_enum.' })
   @IsOptional()
