@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   UnauthorizedException,
+  NotFoundException,
   ConflictException,
   Logger,
 } from '@nestjs/common';
@@ -507,6 +508,59 @@ export class AuthService {
       console.error('Login error:', error);
       throw new UnauthorizedException('Login failed. Please try again.');
     }
+  }
+
+  /**
+   * Current user profile + tokens (same shape as login).
+   * Returns a fresh access_token, and the stored refresh_token from DB.
+   * If no refresh_token is stored yet, issues a full pair and persists refresh.
+   */
+  async getMe(userId: string): Promise<{
+    message: string;
+    user: Partial<User>;
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  }> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      relations: ['region', 'village'],
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    let access_token: string;
+    let refresh_token: string;
+    let expires_in: number;
+
+    if (!user.refresh_token) {
+      const tokens = await this.jwtService.generateTokens(user);
+      user.refresh_token = tokens.refresh_token;
+      user.last_active_at = new Date();
+      await this.userRepository.save(user);
+      access_token = tokens.access_token;
+      refresh_token = tokens.refresh_token;
+      expires_in = tokens.expires_in;
+    } else {
+      const access = await this.jwtService.generateAccessTokenOnly(user);
+      access_token = access.access_token;
+      expires_in = access.expires_in;
+      refresh_token = user.refresh_token;
+      user.last_active_at = new Date();
+      await this.userRepository.save(user);
+    }
+
+    const { password: _, refresh_token: __, ...userWithoutSecrets } = user;
+
+    return {
+      message: 'User profile',
+      user: userWithoutSecrets,
+      access_token,
+      refresh_token,
+      expires_in,
+    };
   }
 
   /**

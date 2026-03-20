@@ -79,6 +79,46 @@ export class AuthJwtService {
   }
 
   /**
+   * Issue a new access token only (same claims as login). Used by GET /auth/me
+   * without rotating the stored refresh token.
+   */
+  async generateAccessTokenOnly(user: User): Promise<{ access_token: string; expires_in: number }> {
+    const payload: TokenPayload = {
+      sub: user.id,
+      phone: user.phone,
+      user_type: user.user_type,
+      verified: user.verified,
+    };
+
+    const access_token = await this.jwtService.signAsync(payload, {
+      expiresIn: this.accessTokenExpiresIn,
+    });
+
+    const expiresInMatch = this.accessTokenExpiresIn.match(/(\d+)([smhd])/);
+    let expiresInSeconds = 900;
+    if (expiresInMatch) {
+      const value = parseInt(expiresInMatch[1]);
+      const unit = expiresInMatch[2];
+      switch (unit) {
+        case 's':
+          expiresInSeconds = value;
+          break;
+        case 'm':
+          expiresInSeconds = value * 60;
+          break;
+        case 'h':
+          expiresInSeconds = value * 3600;
+          break;
+        case 'd':
+          expiresInSeconds = value * 86400;
+          break;
+      }
+    }
+
+    return { access_token, expires_in: expiresInSeconds };
+  }
+
+  /**
    * Verify access token
    */
   async verifyToken(token: string): Promise<TokenPayload> {

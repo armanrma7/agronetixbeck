@@ -51,30 +51,50 @@ export class ApplicationsService {
   }
 
   /**
-   * Validate that delivery dates are not in the past
+   * Parse YYYY-MM-DD as a calendar date in local time (avoids UTC vs local bugs from `new Date(isoDate)`).
+   */
+  private parseDeliveryDateOnly(dateStr: string): Date {
+    const m = String(dateStr).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) {
+      throw new BadRequestException(
+        `Invalid delivery date "${dateStr}". Use YYYY-MM-DD (e.g. 2026-03-01).`,
+      );
+    }
+    const y = parseInt(m[1], 10);
+    const mo = parseInt(m[2], 10) - 1;
+    const d = parseInt(m[3], 10);
+    const dt = new Date(y, mo, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) {
+      throw new BadRequestException(`Invalid calendar date: "${dateStr}"`);
+    }
+    return dt;
+  }
+
+  /**
+   * Validate that delivery dates are not strictly before today (local calendar date).
    */
   private validateDeliveryDates(deliveryDates: string[]): void {
     if (!deliveryDates || deliveryDates.length === 0) {
       throw new BadRequestException('At least one delivery date is required');
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0); // Reset time to start of day for comparison
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
     const invalidDates: string[] = [];
 
     for (const dateStr of deliveryDates) {
-      const delivery = new Date(dateStr);
-      delivery.setHours(0, 0, 0, 0);
-
-      if (delivery < today) {
+      const delivery = this.parseDeliveryDateOnly(dateStr);
+      if (delivery < todayStart) {
         invalidDates.push(dateStr);
       }
     }
 
     if (invalidDates.length > 0) {
+      const iso = todayStart.toISOString().slice(0, 10);
       throw new BadRequestException(
-        `The following delivery dates cannot be in the past: ${invalidDates.join(', ')}`
+        `Each delivery date must be today or later (server date: ${iso}). ` +
+          `These are before today: ${invalidDates.join(', ')}`,
       );
     }
   }
@@ -214,8 +234,10 @@ export class ApplicationsService {
     // Validate delivery dates
     this.validateDeliveryDates(createDto.delivery_dates);
 
-    // Convert date strings to Date objects
-    const deliveryDates = createDto.delivery_dates.map(dateStr => new Date(dateStr));
+    // Convert date strings to Date objects (local calendar date, same as validation)
+    const deliveryDates = createDto.delivery_dates.map((dateStr) =>
+      this.parseDeliveryDateOnly(dateStr),
+    );
 
     // Create application
     const application = this.applicationRepository.create({
@@ -332,7 +354,9 @@ export class ApplicationsService {
 
     if (updateDto.delivery_dates !== undefined) {
       this.validateDeliveryDates(updateDto.delivery_dates);
-      application.delivery_dates = updateDto.delivery_dates.map((d) => new Date(d));
+      application.delivery_dates = updateDto.delivery_dates.map((d) =>
+        this.parseDeliveryDateOnly(d),
+      );
     }
 
     if (updateDto.count !== undefined) {

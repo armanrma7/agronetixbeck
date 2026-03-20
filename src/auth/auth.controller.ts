@@ -1,5 +1,6 @@
 import {
   Controller,
+  Get,
   Post,
   Put,
   Body,
@@ -205,6 +206,38 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto) {
     console.info(loginDto);
     return this.authService.login(loginDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Current authenticated user',
+    description:
+      'Returns the user profile (same fields as login) plus access_token, refresh_token, and expires_in.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile and tokens',
+    schema: {
+      example: {
+        message: 'User profile',
+        user: {
+          id: 'uuid',
+          full_name: 'John Doe',
+          phone: '+1234567890',
+          user_type: 'farmer',
+          verified: true,
+        },
+        access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        refresh_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        expires_in: 900,
+      },
+    },
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async me(@Request() req) {
+    return this.authService.getMe(req.user.id);
   }
 
   @Post('forgot-password')
