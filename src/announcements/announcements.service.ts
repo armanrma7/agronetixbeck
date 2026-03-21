@@ -113,6 +113,55 @@ export class AnnouncementsService {
   }
 
   /**
+   * For owner's "my announcements" list only: counts of applications by status (pending / approved).
+   * Uses two separate aggregates so PG enum binding / raw aliases cannot drop rows.
+   */
+  private async attachOwnerPendingApprovedCounts(
+    announcements: Announcement[],
+  ): Promise<Announcement[]> {
+    if (announcements.length === 0) {
+      return announcements;
+    }
+
+    const ids = announcements.map((a) => a.id);
+
+    const [pendingRows, approvedRows] = await Promise.all([
+      this.applicationRepository
+        .createQueryBuilder('app')
+        .select('app.announcement_id', 'announcement_id')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('app.announcement_id IN (:...ids)', { ids })
+        .andWhere('app.status = :s', { s: ApplicationStatus.PENDING })
+        .groupBy('app.announcement_id')
+        .getRawMany(),
+      this.applicationRepository
+        .createQueryBuilder('app')
+        .select('app.announcement_id', 'announcement_id')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('app.announcement_id IN (:...ids)', { ids })
+        .andWhere('app.status = :s', { s: ApplicationStatus.APPROVED })
+        .groupBy('app.announcement_id')
+        .getRawMany(),
+    ]);
+
+    const pendingMap = new Map<string, number>(
+      pendingRows.map((r) => [String(r.announcement_id), Number(r.cnt)]),
+    );
+    const approvedMap = new Map<string, number>(
+      approvedRows.map((r) => [String(r.announcement_id), Number(r.cnt)]),
+    );
+
+    for (const a of announcements) {
+      const pending = pendingMap.get(a.id) ?? 0;
+      const approved = approvedMap.get(a.id) ?? 0;
+      (a as any).pending_application_count = pending;
+      (a as any).approved_application_count = approved;
+    }
+
+    return announcements;
+  }
+
+  /**
    * Resolve applications count and data for an announcement
    */
   private async resolveApplications(announcement: Announcement): Promise<Announcement> {
@@ -1007,8 +1056,22 @@ export class AnnouncementsService {
     // Attach isFavorite and isApplied for the owner viewing their own announcements
     const withFlags = await this.attachUserFlags(withApplications, userId);
 
+    // Owner-only: pending / approved application counts per announcement
+    const withOwnerCounts = await this.attachOwnerPendingApprovedCounts(withFlags);
+
+    // Ensure counts are always enumerable on the JSON payload (spread + explicit keys)
+    const announcementsPayload = withOwnerCounts.map((ann) => {
+      const pending = (ann as any).pending_application_count ?? 0;
+      const approved = (ann as any).approved_application_count ?? 0;
+      return {
+        ...(ann as any),
+        pending_application_count: pending,
+        approved_application_count: approved,
+      };
+    });
+
     return {
-      announcements: withFlags,
+      announcements: announcementsPayload,
       total,
       page,
       limit,

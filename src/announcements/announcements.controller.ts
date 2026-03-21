@@ -428,6 +428,14 @@ export class AnnouncementsController {
               owner: { type: 'object' },
               regions_data: { type: 'array' },
               applications_count: { type: 'number' },
+              pending_application_count: {
+                type: 'number',
+                description: 'Applications with status pending for this announcement (owner /me only)',
+              },
+              approved_application_count: {
+                type: 'number',
+                description: 'Applications with status approved for this announcement (owner /me only)',
+              },
             },
           },
         },
