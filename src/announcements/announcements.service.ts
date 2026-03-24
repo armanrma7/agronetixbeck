@@ -1467,11 +1467,26 @@ export class AnnouncementsService {
    * Block announcement (admin action)
    */
   async block(id: string, adminId: string): Promise<Announcement> {
-    const announcement = await this.findOne(id);
+    const announcement = await this.findOne(id, adminId);
 
     announcement.status = AnnouncementStatus.BLOCKED;
     announcement.closed_by = adminId;
     await this.announcementRepository.save(announcement);
+
+    // Cancel all PENDING and APPROVED applications for the blocked announcement
+    await this.applicationRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: ApplicationStatus.CANCELED })
+      .where('announcement_id = :id', { id })
+      .andWhere('status IN (:...statuses)', {
+        statuses: [ApplicationStatus.PENDING, ApplicationStatus.APPROVED],
+      })
+      .execute();
+
+    this.logger.log(
+      `Canceled pending/approved applications for blocked announcement ${id}`,
+    );
 
     // Notify owner (centralized messages)
     await this.sendNotificationToUser(
@@ -1485,7 +1500,7 @@ export class AnnouncementsService {
     );
 
     // Return enriched announcement
-    return this.findOne(id);
+    return this.findOne(id, adminId);
   }
 
   /**
