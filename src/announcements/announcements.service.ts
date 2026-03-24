@@ -1148,16 +1148,32 @@ export class AnnouncementsService {
       announcementsMap.get(announcementId)!.myApplications.push(application);
     }
 
+    const announcementIds = [...announcementsMap.keys()];
+
+    // Batch-fetch total application counts per announcement (all applicants)
+    const totalCountRows: { announcement_id: string; cnt: string }[] =
+      announcementIds.length > 0
+        ? await this.applicationRepository
+            .createQueryBuilder('app')
+            .select('app.announcement_id', 'announcement_id')
+            .addSelect('COUNT(*)', 'cnt')
+            .where('app.announcement_id IN (:...ids)', { ids: announcementIds })
+            .groupBy('app.announcement_id')
+            .getRawMany()
+        : [];
+
+    const totalCountMap = new Map<string, number>(
+      totalCountRows.map((r) => [r.announcement_id, Number(r.cnt)]),
+    );
+
     // Convert map to array and enrich announcements
     const announcements = Array.from(announcementsMap.values()).map(({ announcement, myApplications }) => {
-      // Enrich with signed URLs and resolve regions/villages
-      const enriched = {
+      return {
         ...announcement,
         my_applications: myApplications,
         my_applications_count: myApplications.length,
+        applications_count: totalCountMap.get((announcement as any).id) ?? 0,
       };
-      
-      return enriched;
     });
 
     // Enrich all announcements with signed URLs and regions/villages
