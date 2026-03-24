@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AnnouncementFavorite } from '../entities/announcement-favorite.entity';
 import { AnnouncementsService } from '../announcements/announcements.service';
-import { AnnouncementStatus } from '../entities/announcement.entity';
+import { Announcement, AnnouncementStatus } from '../entities/announcement.entity';
 import { CreateFavoriteDto } from './dto/create-favorite.dto';
 
 @Injectable()
@@ -93,8 +93,10 @@ export class FavoritesService {
       ),
     );
 
-    // Filter out any that may have been removed/unpublished
-    return announcements.filter(Boolean);
+    // Only return published announcements
+    return (announcements.filter(Boolean) as Announcement[]).filter(
+      (a) => a.status === AnnouncementStatus.PUBLISHED,
+    );
   }
 
   /**
@@ -116,6 +118,9 @@ export class FavoritesService {
       uniqueIds.map((id) => this.announcementsService.findOne(id)),
     );
 
-    return announcements.filter(Boolean);
+    // Only return published announcements
+    return (announcements.filter(Boolean) as Announcement[]).filter(
+      (a) => a.status === AnnouncementStatus.PUBLISHED,
+    );
   }
 }
