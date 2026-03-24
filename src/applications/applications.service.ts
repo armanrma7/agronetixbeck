@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Application, ApplicationStatus } from '../entities/application.entity';
@@ -853,6 +854,51 @@ export class ApplicationsService {
 
     this.logger.log(`Application ${applicationId} canceled by applicant`);
     return this.findOne(applicationId);
+  }
+
+  /**
+   * Daily system job:
+   * Cancel PENDING applications whose all delivery_dates are already before today.
+   * (If at least one delivery date is today/future, it stays pending.)
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async cancelExpiredPendingApplications(): Promise<void> {
+    try {
+      const expiredPending = await this.applicationRepository
+        .createQueryBuilder('app')
+        .select(['app.id'])
+        .where('app.status = :status', { status: ApplicationStatus.PENDING })
+        .andWhere('cardinality(app.delivery_dates) > 0')
+        .andWhere(
+          `NOT EXISTS (
+             SELECT 1
+             FROM unnest(app.delivery_dates) AS d
+             WHERE d >= CURRENT_DATE
+           )`,
+        )
+        .getMany();
+
+      if (expiredPending.length === 0) {
+        return;
+      }
+
+      const ids = expiredPending.map((a) => a.id);
+      await this.applicationRepository
+        .createQueryBuilder()
+        .update(Application)
+        .set({ status: ApplicationStatus.CANCELED })
+        .whereInIds(ids)
+        .execute();
+
+      this.logger.log(
+        `System auto-canceled ${ids.length} pending application(s) with past delivery_dates`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed daily auto-cancel for expired pending applications: ${error.message}`,
+        error.stack,
+      );
+    }
   }
 }
 
