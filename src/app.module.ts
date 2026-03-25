@@ -12,6 +12,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { DeviceTokensModule } from './device-tokens/device-tokens.module';
 import { MessagesModule } from './messages/messages.module';
+import { MessagesInboxModule } from './messages-inbox/messages-inbox.module';
+import { Message } from './entities/message.entity';
 import { User } from './entities/user.entity';
 import { OtpCode } from './entities/otp-code.entity';
 import { Region } from './entities/region.entity';
@@ -59,6 +61,7 @@ import { Notification } from './entities/notification.entity';
             AnnouncementView,
             AnnouncementFavorite,
             Notification,
+            Message,
           ],
           synchronize: false, // Disabled: Use migrations instead (synchronize conflicts with triggers)
           ssl: {
@@ -74,6 +77,7 @@ import { Notification } from './entities/notification.entity';
     NotificationsModule,
     DeviceTokensModule,
     MessagesModule,
+    MessagesInboxModule,
     AnnouncementsModule,
     ApplicationsModule,
     FavoritesModule,
