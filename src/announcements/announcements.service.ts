@@ -379,6 +379,7 @@ export class AnnouncementsService {
     }
     let s = String(value).toLowerCase().trim();
     if (s === 'm²' || s === 'mÂ²') s = 'm2';
+    if (s === 'm3' || s === 'mÂ³') s = 'm3';
 
     const allowed = await this.getEnumCached('unit_enum');
     if (!allowed.has(s)) {
