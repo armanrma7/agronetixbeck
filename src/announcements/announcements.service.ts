@@ -378,8 +378,9 @@ export class AnnouncementsService {
       throw new BadRequestException('unit is required');
     }
     let s = String(value).toLowerCase().trim();
-    if (s === 'm²' || s === 'mÂ²') s = 'm2';
-    if (s === 'm3' || s === 'mÂ³') s = 'm3';
+    // Handle Unicode superscript variants and their UTF-8-as-Latin-1 encoding artifacts
+    if (s === 'm²' || s === 'mâ²') s = 'm2';
+    if (s === 'm³' || s === 'mâ³') s = 'm3';
 
     const allowed = await this.getEnumCached('unit_enum');
     if (!allowed.has(s)) {
@@ -1083,10 +1084,42 @@ export class AnnouncementsService {
    * Get announcements where the user has applied (created applications)
    * Returns only the user's own applications, not all applications
    */
-  async findAnnouncementsWithMyApplications(userId: string): Promise<Announcement[]> {
-    // First, get all applications created by the user with announcement details
+  async findAnnouncementsWithMyApplications(
+    userId: string,
+    page = 1,
+    limit = 10,
+  ): Promise<{ announcements: any[]; total: number; page: number; limit: number }> {
+    const skip = (page - 1) * limit;
+
+    // Step 1: get distinct announcement IDs the user has applied to, paginated
+    // GROUP BY deduplicates; MIN(created_at) must be in SELECT to be used in ORDER BY
+    const distinctRows: { announcement_id: string }[] = await this.applicationRepository
+      .createQueryBuilder('app')
+      .select('app.announcement_id', 'announcement_id')
+      .addSelect('MIN(app.created_at)', 'min_created_at')
+      .where('app.applicant_id = :userId', { userId })
+      .groupBy('app.announcement_id')
+      .orderBy('min_created_at', 'DESC')
+      .offset(skip)
+      .limit(limit)
+      .getRawMany();
+
+    const total: number = await this.applicationRepository
+      .createQueryBuilder('app')
+      .select('COUNT(DISTINCT app.announcement_id)', 'cnt')
+      .where('app.applicant_id = :userId', { userId })
+      .getRawOne()
+      .then((r) => Number(r?.cnt ?? 0));
+
+    if (distinctRows.length === 0) {
+      return { announcements: [], total, page, limit };
+    }
+
+    const announcementIds = distinctRows.map((r) => r.announcement_id);
+
+    // Step 2: fetch all user applications for those announcements
     const userApplications = await this.applicationRepository.find({
-      where: { applicant_id: userId },
+      where: announcementIds.map((id) => ({ applicant_id: userId, announcement_id: id })),
       relations: ['announcement', 'announcement.owner', 'announcement.group', 'announcement.item'],
       select: {
         id: true,
@@ -1123,70 +1156,52 @@ export class AnnouncementsService {
         },
       },
       order: { created_at: 'DESC' },
-      withDeleted: false,
     });
 
-    if (userApplications.length === 0) {
-      return [];
+    // Step 3: group applications by announcement, preserving page order
+    const announcementsMap = new Map<string, { announcement: Announcement; myApplications: Application[] }>();
+    for (const id of announcementIds) {
+      announcementsMap.set(id, { announcement: null as any, myApplications: [] });
     }
-
-    // Group applications by announcement_id
-    const announcementsMap = new Map<string, {
-      announcement: Announcement;
-      myApplications: Application[];
-    }>();
-
     for (const application of userApplications) {
-      const announcementId = application.announcement_id;
-      
-      if (!announcementsMap.has(announcementId)) {
-        announcementsMap.set(announcementId, {
-          announcement: application.announcement,
-          myApplications: [],
-        });
+      const entry = announcementsMap.get(application.announcement_id);
+      if (entry) {
+        entry.announcement = application.announcement;
+        entry.myApplications.push(application);
       }
-      
-      announcementsMap.get(announcementId)!.myApplications.push(application);
     }
 
-    const announcementIds = [...announcementsMap.keys()];
-
-    // Batch-fetch total application counts per announcement (all applicants)
+    // Step 4: batch-fetch total application counts per announcement (all applicants)
     const totalCountRows: { announcement_id: string; cnt: string }[] =
-      announcementIds.length > 0
-        ? await this.applicationRepository
-            .createQueryBuilder('app')
-            .select('app.announcement_id', 'announcement_id')
-            .addSelect('COUNT(*)', 'cnt')
-            .where('app.announcement_id IN (:...ids)', { ids: announcementIds })
-            .groupBy('app.announcement_id')
-            .getRawMany()
-        : [];
+      await this.applicationRepository
+        .createQueryBuilder('app')
+        .select('app.announcement_id', 'announcement_id')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('app.announcement_id IN (:...ids)', { ids: announcementIds })
+        .groupBy('app.announcement_id')
+        .getRawMany();
 
     const totalCountMap = new Map<string, number>(
       totalCountRows.map((r) => [r.announcement_id, Number(r.cnt)]),
     );
 
-    // Convert map to array and enrich announcements
-    const announcements = Array.from(announcementsMap.values()).map(({ announcement, myApplications }) => {
-      return {
+    // Step 5: build enriched announcement objects in page order
+    const announcements = announcementIds
+      .map((id) => announcementsMap.get(id)!)
+      .filter((entry) => entry.announcement !== null)
+      .map(({ announcement, myApplications }) => ({
         ...announcement,
         my_applications: myApplications,
         my_applications_count: myApplications.length,
         applications_count: totalCountMap.get((announcement as any).id) ?? 0,
-      };
-    });
+      }));
 
-    // Enrich all announcements with signed URLs and regions/villages
-    const enrichedAnnouncements = await this.enrichAnnouncementsWithSignedUrls(announcements);
-    const withRegions = await Promise.all(
-      enrichedAnnouncements.map(ann => this.resolveRegionsAndVillages(ann))
-    );
-
-    // Attach isFavorite and isApplied
+    // Step 6: enrich with signed URLs, regions/villages, and user flags
+    const enriched = await this.enrichAnnouncementsWithSignedUrls(announcements);
+    const withRegions = await Promise.all(enriched.map((ann) => this.resolveRegionsAndVillages(ann)));
     const withFlags = await this.attachUserFlags(withRegions, userId);
 
-    return withFlags;
+    return { announcements: withFlags, total, page, limit };
   }
 
   /**

@@ -578,13 +578,32 @@ export class AnnouncementsController {
   @Get('applied')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get announcements where current user has applied' })
+  @ApiOperation({ summary: 'Get announcements where current user has applied (paginated)' })
+  @ApiQuery({ name: 'page', required: false, schema: { type: 'integer', default: 1 } })
+  @ApiQuery({ name: 'limit', required: false, schema: { type: 'integer', default: 10 } })
   @ApiResponse({
     status: 200,
-    description: 'List of announcements where the user has created applications',
+    description: 'Paginated list of announcements where the user has created applications',
+    schema: {
+      type: 'object',
+      properties: {
+        announcements: { type: 'array', items: { type: 'object' } },
+        total: { type: 'integer' },
+        page: { type: 'integer' },
+        limit: { type: 'integer' },
+      },
+    },
   })
-  async findAnnouncementsWithMyApplications(@Request() req) {
-    return this.announcementsService.findAnnouncementsWithMyApplications(req.user.id);
+  async findAnnouncementsWithMyApplications(
+    @Request() req,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.announcementsService.findAnnouncementsWithMyApplications(
+      req.user.id,
+      page ? Number(page) : 1,
+      limit ? Number(limit) : 10,
+    );
   }
 
   @Post(':id/view')

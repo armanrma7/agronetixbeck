@@ -862,6 +862,7 @@ export class ApplicationsService {
    * (If at least one delivery date is today/future, it stays pending.)
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  // @Cron(CronExpression.EVERY_10_SECONDS)
   async cancelExpiredPendingApplications(): Promise<void> {
     try {
       const expiredPending = await this.applicationRepository
