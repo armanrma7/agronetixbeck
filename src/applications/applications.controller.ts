@@ -17,6 +17,7 @@ import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtActiveGuard } from '../auth/guards/jwt-active.guard';
 import { UserType } from '../entities/user.entity';
 
 @ApiTags('applications')
@@ -25,7 +26,7 @@ export class ApplicationsController {
   constructor(private readonly applicationsService: ApplicationsService) {}
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a new application to an announcement' })
   @ApiResponse({
@@ -217,7 +218,7 @@ export class ApplicationsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Edit application (announcer or applicant, when pending)',
@@ -251,7 +252,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/approve')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Approve application (announcer or admin)' })
@@ -277,7 +278,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/reject')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reject application (announcement owner or admin)' })
@@ -303,7 +304,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiParam({ name: 'id', description: 'Application UUID', type: String })
@@ -339,7 +340,7 @@ export class ApplicationsController {
   }
 
   @Post(':id/close')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtActiveGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({

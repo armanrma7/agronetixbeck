@@ -20,6 +20,7 @@ import {
 import { NotificationService } from './notification.service';
 import { NotificationType } from '../entities/notification.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ActiveAccountGuard } from '../auth/guards/active-account.guard';
 
 @ApiTags('notifications')
 @Controller('notifications')
@@ -152,6 +153,7 @@ export class NotificationsController {
   }
 
   @Patch('seen-all')
+  @UseGuards(ActiveAccountGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark all notifications as seen for current user' })
   @ApiResponse({

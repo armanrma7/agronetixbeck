@@ -25,6 +25,7 @@ import { MessagesInboxService } from './messages-inbox.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { IsAdminGuard } from '../auth/guards/is-admin.guard';
+import { ActiveAccountGuard } from '../auth/guards/active-account.guard';
 import { UserType } from '../entities/user.entity';
 
 @ApiTags('messages-inbox')
@@ -43,6 +44,7 @@ export class MessagesInboxController {
   }
 
   @Get()
+  @UseGuards(ActiveAccountGuard)
   @ApiOperation({
     summary: 'Get messages — admin sees all, user sees only their own',
   })
@@ -63,6 +65,7 @@ export class MessagesInboxController {
   }
 
   @Get(':id')
+  @UseGuards(ActiveAccountGuard)
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiOperation({ summary: 'Get one message by ID' })
   @ApiResponse({ status: 200, description: 'Message detail' })
@@ -84,6 +87,7 @@ export class MessagesInboxController {
   }
 
   @Delete(':id')
+  @UseGuards(ActiveAccountGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiOperation({ summary: 'Delete a message (admin any, user own only)' })

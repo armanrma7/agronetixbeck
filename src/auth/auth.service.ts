@@ -445,16 +445,14 @@ export class AuthService {
         throw new UnauthorizedException('Account is locked. Please contact admin.');
       }
 
-      // For companies, check account status
+      // Blocked users can never log in, regardless of user type
+      if (user.account_status === AccountStatus.BLOCKED) {
+        throw new UnauthorizedException('Account is blocked. Please contact admin.');
+      }
+
+      // For companies, non-active (and non-pending) accounts cannot log in
       if (user.user_type === UserType.COMPANY) {
-        if (user.account_status === AccountStatus.PENDING) {
-          throw new UnauthorizedException('Account is pending admin review. Please wait for verification.');
-        }
-        if (user.account_status === AccountStatus.BLOCKED) {
-          throw new UnauthorizedException('Account is blocked. Please contact admin.');
-        }
-        // Account must be active and verified to login
-        if (user.account_status !== AccountStatus.ACTIVE) {
+        if (user.account_status !== AccountStatus.ACTIVE && user.account_status !== AccountStatus.PENDING) {
           throw new UnauthorizedException('Account is not active. Please contact admin.');
         }
       }

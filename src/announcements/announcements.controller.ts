@@ -25,6 +25,7 @@ import { AnnouncementsService } from './announcements.service';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { UpdateAnnouncementDto } from './dto/update-announcement.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtActiveGuard } from '../auth/guards/jwt-active.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { CanCreateAnnouncementGuard } from './guards/can-create-announcement.guard';
 import { AnnouncementOwnerGuard } from './guards/announcement-owner.guard';
@@ -80,7 +81,7 @@ export class AnnouncementsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard, CanCreateAnnouncementGuard)
+  @UseGuards(JwtActiveGuard, CanCreateAnnouncementGuard)
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 3 }], {
       limits: { fileSize: 6 * 1024 * 1024 }, // 6MB per file (buffer to allow files through, validation in service)
@@ -667,7 +668,7 @@ export class AnnouncementsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
+  @UseGuards(JwtActiveGuard, AnnouncementOwnerOrAdminGuard)
   @UseInterceptors(
     FileFieldsInterceptor([{ name: 'images', maxCount: 3 }], {
       limits: { fileSize: 6 * 1024 * 1024 }, // 6MB per file (buffer to allow files through, validation in service)
@@ -873,7 +874,7 @@ export class AnnouncementsController {
   }
 
   @Post(':id/close')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
+  @UseGuards(JwtActiveGuard, AnnouncementOwnerOrAdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Close announcement (owner or admin)' })
@@ -892,7 +893,7 @@ export class AnnouncementsController {
   }
 
   @Post(':id/cancel')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
+  @UseGuards(JwtActiveGuard, AnnouncementOwnerOrAdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Cancel announcement (owner or admin)' })
@@ -911,7 +912,7 @@ export class AnnouncementsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard, AnnouncementOwnerOrAdminGuard)
+  @UseGuards(JwtActiveGuard, AnnouncementOwnerOrAdminGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete announcement (owner or admin, soft delete)' })

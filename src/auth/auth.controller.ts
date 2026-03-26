@@ -23,6 +23,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserOwnerOrAdminGuard } from './guards/user-owner-or-admin.guard';
+import { ActiveAccountGuard } from './guards/active-account.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -335,7 +336,7 @@ export class AuthController {
   }
 
   @Post('change-password')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveAccountGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change password for authenticated user' })

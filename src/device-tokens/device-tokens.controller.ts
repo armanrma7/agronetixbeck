@@ -23,6 +23,7 @@ import { DeviceTokenService } from '../notifications/device-token.service';
 import { RegisterDeviceDto } from './dto/register-device.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserType } from '../entities/user.entity';
+import { ActiveAccountGuard } from '../auth/guards/active-account.guard';
 
 @ApiTags('device-tokens')
 @Controller('device-tokens')
@@ -47,6 +48,7 @@ export class DeviceTokensController {
   }
 
   @Get()
+  @UseGuards(ActiveAccountGuard)
   @ApiOperation({
     summary: 'Get device tokens',
     description:
@@ -75,6 +77,7 @@ export class DeviceTokensController {
   }
 
   @Delete(':id')
+  @UseGuards(ActiveAccountGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a device token by ID' })
   @ApiParam({
@@ -92,6 +95,7 @@ export class DeviceTokensController {
   }
 
   @Delete('fcm/:fcmToken')
+  @UseGuards(ActiveAccountGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Remove a device token by FCM token' })
   @ApiParam({
