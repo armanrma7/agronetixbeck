@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, IsString, Min, Max, MaxLength, IsDateString, IsNotEmpty, ValidateIf, IsUUID, IsArray, ArrayMinSize, ArrayMaxSize } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Min, Max, MaxLength, IsDateString, IsNotEmpty, ValidateIf, IsUUID, IsArray, ArrayMaxSize } from 'class-validator';
 
 export class CreateApplicationDto {
   @ApiProperty({
@@ -21,17 +21,17 @@ export class CreateApplicationDto {
   @Max(999999, { message: 'count cannot exceed 999999' })
   count?: number;
 
-  @ApiProperty({
-    description: 'Array of delivery dates (YYYY-MM-DD format). Required - can send multiple dates for daily deliveries. Cannot be in the past.',
+  @ApiPropertyOptional({
+    description:
+      'Delivery dates (YYYY-MM-DD). Required when the announcement has date_from or date_to; omit or [] when it has neither. Cannot be in the past.',
     type: [String],
     example: ['2026-02-15', '2026-02-16', '2026-02-17'],
-    minItems: 1,
   })
+  @IsOptional()
   @IsArray({ message: 'delivery_dates must be an array' })
-  @ArrayMinSize(1, { message: 'At least one delivery date is required' })
   @ArrayMaxSize(365, { message: 'Cannot exceed 365 delivery dates' })
   @IsDateString({}, { each: true, message: 'Each delivery date must be a valid date in YYYY-MM-DD format' })
-  delivery_dates: string[];
+  delivery_dates?: string[];
 
   @ApiPropertyOptional({
     description: 'Optional notes or comments',

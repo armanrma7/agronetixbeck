@@ -267,6 +267,71 @@ export class AnnouncementsService {
   }
 
   /**
+   * Batch-resolve regions_data / villages_data for many announcements (2 queries total).
+   * Same shape as resolveRegionsAndVillages per item; order follows each announcement's UUID arrays.
+   */
+  private async resolveRegionsAndVillagesForMany(announcements: Announcement[]): Promise<void> {
+    if (announcements.length === 0) {
+      return;
+    }
+
+    const regionIdSet = new Set<string>();
+    const villageIdSet = new Set<string>();
+    for (const a of announcements) {
+      a.regions?.forEach((id) => regionIdSet.add(id));
+      a.villages?.forEach((id) => villageIdSet.add(id));
+    }
+
+    const [regionRows, villageRows] = await Promise.all([
+      regionIdSet.size > 0
+        ? this.regionRepository.find({
+            where: { id: In([...regionIdSet]) },
+            select: ['id', 'name_am', 'name_en', 'name_ru'],
+          })
+        : Promise.resolve([] as Region[]),
+      villageIdSet.size > 0
+        ? this.villageRepository.find({
+            where: { id: In([...villageIdSet]) },
+            select: ['id', 'name_am', 'name_en', 'name_ru'],
+          })
+        : Promise.resolve([] as Village[]),
+    ]);
+
+    const regionMap = new Map(regionRows.map((r) => [r.id, r]));
+    const villageMap = new Map(villageRows.map((v) => [v.id, v]));
+
+    for (const announcement of announcements) {
+      if (announcement.regions && announcement.regions.length > 0) {
+        (announcement as any).regions_data = announcement.regions
+          .map((id) => regionMap.get(id))
+          .filter((r): r is Region => r != null)
+          .map((region) => ({
+            id: region.id,
+            name_am: region.name_am,
+            name_en: region.name_en,
+            name_ru: region.name_ru,
+          }));
+      } else {
+        (announcement as any).regions_data = [];
+      }
+
+      if (announcement.villages && announcement.villages.length > 0) {
+        (announcement as any).villages_data = announcement.villages
+          .map((id) => villageMap.get(id))
+          .filter((v): v is Village => v != null)
+          .map((village) => ({
+            id: village.id,
+            name_am: village.name_am,
+            name_en: village.name_en,
+            name_ru: village.name_ru,
+          }));
+      } else {
+        (announcement as any).villages_data = [];
+      }
+    }
+  }
+
+  /**
    * Enrich announcement with signed URLs for images.
    * Converts stored file paths (keys) to signed URLs.
    * Automatically removes orphaned image paths (deleted from storage) from the DB record.
@@ -299,7 +364,7 @@ export class AnnouncementsService {
   }
 
   /**
-   * Enrich multiple announcements with signed URLs
+   * Enrich multiple announcements with signed URLs (and region/village names per item).
    */
   private async enrichAnnouncementsWithSignedUrls(announcements: Announcement[]): Promise<Announcement[]> {
     const enrichedPromises = announcements.map(async (announcement) => {
@@ -777,14 +842,20 @@ export class AnnouncementsService {
 
     const [announcements, total] = await queryBuilder.getManyAndCount();
 
-    // Enrich with signed URLs and resolve regions/villages names
-    const enrichedAnnouncements = await this.enrichAnnouncementsWithSignedUrls(announcements);
-    
-    // Resolve applications count and data for each announcement
-    const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
+    // List view: batch region/village lookups (2 queries) + applications count in parallel; no image signing
+    if (announcements.length > 0) {
+      await Promise.all([
+        this.resolveRegionsAndVillagesForMany(announcements),
+        this.resolveApplicationsForAnnouncements(announcements),
+      ]);
+    }
 
-    // Attach isFavorite and isApplied per user
-    const withFlags = await this.attachUserFlags(withApplications, params.currentUserId);
+    const listWithoutImages = announcements.map((ann) => {
+      const { images: _omit, ...rest } = ann as Announcement & { images?: string[] };
+      return rest as Announcement;
+    });
+
+    const withFlags = await this.attachUserFlags(listWithoutImages, params.currentUserId);
 
     return {
       announcements: withFlags,

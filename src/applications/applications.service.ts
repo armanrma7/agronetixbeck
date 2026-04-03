@@ -71,12 +71,26 @@ export class ApplicationsService {
     return dt;
   }
 
+  /** True when announcement defines a period — then delivery_dates are required on apply/update. */
+  private announcementRequiresDeliveryDates(announcement: Announcement): boolean {
+    return announcement.date_from != null || announcement.date_to != null;
+  }
+
   /**
-   * Validate that delivery dates are not strictly before today (local calendar date).
+   * Validate delivery dates: if required, at least one date; each date must be today or later (local).
    */
-  private validateDeliveryDates(deliveryDates: string[]): void {
-    if (!deliveryDates || deliveryDates.length === 0) {
-      throw new BadRequestException('At least one delivery date is required');
+  private validateDeliveryDates(
+    deliveryDates: string[] | undefined | null,
+    required: boolean,
+  ): void {
+    const arr = deliveryDates ?? [];
+    if (arr.length === 0) {
+      if (required) {
+        throw new BadRequestException(
+          'At least one delivery date is required for announcements with a start or end date',
+        );
+      }
+      return;
     }
 
     const now = new Date();
@@ -84,7 +98,7 @@ export class ApplicationsService {
 
     const invalidDates: string[] = [];
 
-    for (const dateStr of deliveryDates) {
+    for (const dateStr of arr) {
       const delivery = this.parseDeliveryDateOnly(dateStr);
       if (delivery < todayStart) {
         invalidDates.push(dateStr);
@@ -232,13 +246,14 @@ export class ApplicationsService {
       }
     }
 
-    // Validate delivery dates
-    this.validateDeliveryDates(createDto.delivery_dates);
+    const datesRequired = this.announcementRequiresDeliveryDates(announcement);
+    this.validateDeliveryDates(createDto.delivery_dates, datesRequired);
 
-    // Convert date strings to Date objects (local calendar date, same as validation)
-    const deliveryDates = createDto.delivery_dates.map((dateStr) =>
-      this.parseDeliveryDateOnly(dateStr),
-    );
+    const rawDates = createDto.delivery_dates ?? [];
+    const deliveryDates =
+      rawDates.length === 0
+        ? []
+        : rawDates.map((dateStr) => this.parseDeliveryDateOnly(dateStr));
 
     // Create application
     const application = this.applicationRepository.create({
@@ -354,10 +369,12 @@ export class ApplicationsService {
     }
 
     if (updateDto.delivery_dates !== undefined) {
-      this.validateDeliveryDates(updateDto.delivery_dates);
-      application.delivery_dates = updateDto.delivery_dates.map((d) =>
-        this.parseDeliveryDateOnly(d),
-      );
+      const datesRequired = this.announcementRequiresDeliveryDates(announcement);
+      this.validateDeliveryDates(updateDto.delivery_dates, datesRequired);
+      application.delivery_dates =
+        updateDto.delivery_dates.length === 0
+          ? []
+          : updateDto.delivery_dates.map((d) => this.parseDeliveryDateOnly(d));
     }
 
     if (updateDto.count !== undefined) {

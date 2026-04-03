@@ -8,7 +8,6 @@ import {
   MaxLength,
   IsDateString,
   IsArray,
-  ArrayMinSize,
   ArrayMaxSize,
 } from 'class-validator';
 
@@ -25,13 +24,13 @@ export class UpdateApplicationDto {
   count?: number;
 
   @ApiPropertyOptional({
-    description: 'Delivery dates (YYYY-MM-DD). At least one required.',
+    description:
+      'Delivery dates (YYYY-MM-DD). Required length ≥1 only when the announcement has date_from or date_to; otherwise may be omitted or [].',
     type: [String],
     example: ['2026-02-15', '2026-02-16'],
   })
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(1, { message: 'At least one delivery date is required' })
   @ArrayMaxSize(365, { message: 'Cannot exceed 365 delivery dates' })
   @IsDateString({}, { each: true, message: 'Each delivery date must be YYYY-MM-DD' })
   delivery_dates?: string[];
