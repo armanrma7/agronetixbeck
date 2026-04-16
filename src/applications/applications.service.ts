@@ -156,7 +156,11 @@ export class ApplicationsService {
 
     // Validate transitions from approved (announcement owner can reject or close/cancel)
     if (currentStatus === ApplicationStatus.APPROVED) {
-      const allowed = [ApplicationStatus.CLOSED, ApplicationStatus.CANCELED, ApplicationStatus.REJECTED];
+      const allowed = [
+        ApplicationStatus.CLOSED,
+        ApplicationStatus.CANCELED,
+        ApplicationStatus.REJECTED,
+      ];
       if (!allowed.includes(newStatus)) {
         throw new BadRequestException(
           `Cannot transition from ${currentStatus} to ${newStatus}. Allowed: ${allowed.join(', ')}`,
@@ -251,9 +255,7 @@ export class ApplicationsService {
 
     const rawDates = createDto.delivery_dates ?? [];
     const deliveryDates =
-      rawDates.length === 0
-        ? []
-        : rawDates.map((dateStr) => this.parseDeliveryDateOnly(dateStr));
+      rawDates.length === 0 ? [] : rawDates.map((dateStr) => this.parseDeliveryDateOnly(dateStr));
 
     // Create application
     const application = this.applicationRepository.create({
@@ -297,7 +299,7 @@ export class ApplicationsService {
   async findOne(id: string, userId?: string, userType?: string): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id },
-      relations: ['applicant', 'announcement', 'announcement.owner'],
+      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
       select: {
         id: true,
         announcement_id: true,
@@ -308,7 +310,12 @@ export class ApplicationsService {
         status: true,
         created_at: true,
         updated_at: true,
-        applicant: { id: true, full_name: true },
+        applicant: {
+          id: true,
+          full_name: true,
+          region: { id: true, name_en: true, name_am: true, name_ru: true },
+          village: { id: true, name_en: true, name_am: true, name_ru: true },
+        },
         announcement: { id: true, owner_id: true, owner: { id: true } },
       },
       withDeleted: false,
@@ -323,7 +330,9 @@ export class ApplicationsService {
       const isApplicant = application.applicant_id === userId;
       const isAnnouncementOwner = (application.announcement as { owner_id?: string })?.owner_id === userId;
       if (!isAdmin && !isApplicant && !isAnnouncementOwner) {
-        throw new ForbiddenException('You can only view your own applications or those for your announcements');
+        throw new ForbiddenException(
+          'You can only view your own applications or those for your announcements',
+        );
       }
     }
 
@@ -423,13 +432,15 @@ export class ApplicationsService {
     const applicantSelect = {
       id: true, full_name: true, phone: true,
       profile_picture: true, user_type: true,
+      region: { id: true, name_en: true, name_am: true, name_ru: true },
+      village: { id: true, name_en: true, name_am: true, name_ru: true },
     };
 
     if (isOwner || isAdmin) {
       // Owner or admin: see all applications (any status)
       const [applications, total] = await this.applicationRepository.findAndCount({
         where: { announcement_id: announcementId },
-        relations: ['applicant'],
+        relations: ['applicant', 'applicant.region', 'applicant.village'],
         select: {
           id: true, announcement_id: true, applicant_id: true,
           count: true, delivery_dates: true, notes: true,
@@ -450,7 +461,7 @@ export class ApplicationsService {
         announcement_id: announcementId,
         applicant_id: userId,
       },
-      relations: ['applicant'],
+      relations: ['applicant', 'applicant.region', 'applicant.village'],
       select: {
         id: true, announcement_id: true, applicant_id: true,
         count: true, delivery_dates: true, notes: true,
@@ -488,10 +499,12 @@ export class ApplicationsService {
       phone: true,
       profile_picture: true,
       user_type: true,
+      region: { id: true, name_en: true, name_am: true, name_ru: true },
+      village: { id: true, name_en: true, name_am: true, name_ru: true },
     };
 
     const [applications, total] = await this.applicationRepository.findAndCount({
-      relations: ['applicant', 'announcement', 'announcement.owner'],
+      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
       select: {
         id: true,
         announcement_id: true,
@@ -548,11 +561,13 @@ export class ApplicationsService {
     const safeUserSelect = {
       id: true, full_name: true, phone: true,
       profile_picture: true, user_type: true,
+      region: { id: true, name_en: true, name_am: true, name_ru: true },
+      village: { id: true, name_en: true, name_am: true, name_ru: true },
     };
 
     const [applications, total] = await this.applicationRepository.findAndCount({
       where: { applicant_id: userId },
-      relations: ['applicant', 'announcement', 'announcement.owner'],
+      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
       select: {
         id: true, announcement_id: true, applicant_id: true,
         count: true, delivery_dates: true, notes: true,
@@ -875,8 +890,8 @@ export class ApplicationsService {
 
   /**
    * Daily system job:
-   * Cancel PENDING applications whose all delivery_dates are already before today.
-   * (If at least one delivery date is today/future, it stays pending.)
+   * Close PENDING applications only when ALL delivery_dates are before today.
+   * If even one delivery date is today or in the future, the application stays pending.
    */
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   // @Cron(CronExpression.EVERY_10_SECONDS)
@@ -904,16 +919,16 @@ export class ApplicationsService {
       await this.applicationRepository
         .createQueryBuilder()
         .update(Application)
-        .set({ status: ApplicationStatus.CANCELED })
+        .set({ status: ApplicationStatus.CLOSED })
         .whereInIds(ids)
         .execute();
 
       this.logger.log(
-        `System auto-canceled ${ids.length} pending application(s) with past delivery_dates`,
+        `System auto-closed ${ids.length} pending application(s) — all delivery dates are in the past`,
       );
     } catch (error) {
       this.logger.error(
-        `Failed daily auto-cancel for expired pending applications: ${error.message}`,
+        `Failed daily auto-close for expired pending applications: ${error.message}`,
         error.stack,
       );
     }

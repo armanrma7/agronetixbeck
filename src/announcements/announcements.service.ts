@@ -164,10 +164,16 @@ export class AnnouncementsService {
   /**
    * Resolve applications count and data for an announcement
    */
-  private async resolveApplications(announcement: Announcement): Promise<Announcement> {
+  private async resolveApplications(announcement: Announcement, currentUserId?: string): Promise<Announcement> {
+    if (!currentUserId) {
+      (announcement as any).applications_count = 0;
+      (announcement as any).applications = [];
+      return announcement;
+    }
+
     const applications = await this.applicationRepository.find({
-      where: { announcement_id: announcement.id },
-      relations: ['applicant'],
+      where: { announcement_id: announcement.id, applicant_id: currentUserId },
+      relations: ['applicant', 'applicant.region', 'applicant.village'],
       select: {
         id: true,
         applicant_id: true,
@@ -180,13 +186,14 @@ export class AnnouncementsService {
         applicant: {
           id: true,
           full_name: true,
+          region: { id: true, name_en: true, name_am: true, name_ru: true },
+          village: { id: true, name_en: true, name_am: true, name_ru: true },
         },
       },
       order: { created_at: 'DESC' },
       withDeleted: false,
     });
 
-    // Attach applications count and data
     (announcement as any).applications_count = applications.length;
     (announcement as any).applications = applications;
 
@@ -355,23 +362,23 @@ export class AnnouncementsService {
           );
       }
 
-      return {
-        ...announcement,
-        images: signedUrls,
-      };
+      // Mutate in place so parallel enrichment steps on the same objects stay in sync
+      announcement.images = signedUrls;
     }
     return announcement;
   }
 
   /**
-   * Enrich multiple announcements with signed URLs (and region/village names per item).
+   * Enrich multiple announcements with signed URLs and region/village names.
+   * Uses batch region/village resolution (2 queries total) and fires all image
+   * signing in parallel alongside the region lookup.
    */
   private async enrichAnnouncementsWithSignedUrls(announcements: Announcement[]): Promise<Announcement[]> {
-    const enrichedPromises = announcements.map(async (announcement) => {
-      const withUrls = await this.enrichWithSignedUrls(announcement);
-      return this.resolveRegionsAndVillages(withUrls);
-    });
-    return Promise.all(enrichedPromises);
+    await Promise.all([
+      Promise.all(announcements.map((a) => this.enrichWithSignedUrls(a))),
+      this.resolveRegionsAndVillagesForMany(announcements),
+    ]);
+    return announcements;
   }
 
   /**
@@ -976,8 +983,8 @@ export class AnnouncementsService {
     const withUrls = await this.enrichWithSignedUrls(announcement);
     const withRegions = await this.resolveRegionsAndVillages(withUrls);
     
-    // Resolve applications count and data
-    const withApplications = await this.resolveApplications(withRegions);
+    // Resolve applications count and data (only current user's applications)
+    const withApplications = await this.resolveApplications(withRegions, currentUserId);
 
     // Attach isFavorite and isApplied
     const [enriched] = await this.attachUserFlags([withApplications], currentUserId);
@@ -1120,26 +1127,21 @@ export class AnnouncementsService {
     // Get paginated results and total count in parallel
     const [announcements, total] = await queryBuilder.getManyAndCount();
 
-    // Enrich with signed URLs and resolve regions/villages names
-    const enrichedAnnouncements = await this.enrichAnnouncementsWithSignedUrls(announcements);
-    
-    // Resolve applications count and data for each announcement (batch query - already optimized)
-    const withApplications = await this.resolveApplicationsForAnnouncements(enrichedAnnouncements);
-
-    // Attach isFavorite and isApplied for the owner viewing their own announcements
-    const withFlags = await this.attachUserFlags(withApplications, userId);
-
-    // Owner-only: pending / approved application counts per announcement
-    const withOwnerCounts = await this.attachOwnerPendingApprovedCounts(withFlags);
+    // Run all enrichment steps in parallel — they are independent and all mutate in place
+    await Promise.all([
+      this.enrichAnnouncementsWithSignedUrls(announcements),       // signed URLs + batch regions/villages (2 DB queries)
+      this.resolveApplicationsForAnnouncements(announcements),     // total application counts (1 DB query)
+      this.attachUserFlags(announcements, userId),                  // isFavorite + isApplied flags (2 DB queries)
+      this.attachOwnerPendingApprovedCounts(announcements),         // pending/approved counts (2 DB queries)
+    ]);
 
     // Ensure counts are always enumerable on the JSON payload (spread + explicit keys)
-    const announcementsPayload = withOwnerCounts.map((ann) => {
-      const pending = (ann as any).pending_application_count ?? 0;
-      const approved = (ann as any).approved_application_count ?? 0;
+    const announcementsPayload = announcements.map((ann) => {
+      const { applications: _r1, images: _r2, ...rest } = ann as any;
       return {
-        ...(ann as any),
-        pending_application_count: pending,
-        approved_application_count: approved,
+        ...rest,
+        pending_application_count: (ann as any).pending_application_count ?? 0,
+        approved_application_count: (ann as any).approved_application_count ?? 0,
       };
     });
 
@@ -1191,7 +1193,7 @@ export class AnnouncementsService {
     // Step 2: fetch all user applications for those announcements
     const userApplications = await this.applicationRepository.find({
       where: announcementIds.map((id) => ({ applicant_id: userId, announcement_id: id })),
-      relations: ['announcement', 'announcement.owner', 'announcement.group', 'announcement.item'],
+      relations: ['announcement', 'announcement.owner', 'announcement.owner.region', 'announcement.owner.village', 'announcement.group', 'announcement.item'],
       select: {
         id: true,
         applicant_id: true,
@@ -1224,6 +1226,12 @@ export class AnnouncementsService {
           views_count: true,
           created_at: true,
           updated_at: true,
+          owner: {
+            id: true,
+            full_name: true,
+            region: { id: true, name_en: true, name_am: true, name_ru: true },
+            village: { id: true, name_en: true, name_am: true, name_ru: true },
+          },
         },
       },
       order: { created_at: 'DESC' },
@@ -1242,37 +1250,31 @@ export class AnnouncementsService {
       }
     }
 
-    // Step 4: batch-fetch total application counts per announcement (all applicants)
-    const totalCountRows: { announcement_id: string; cnt: string }[] =
-      await this.applicationRepository
-        .createQueryBuilder('app')
-        .select('app.announcement_id', 'announcement_id')
-        .addSelect('COUNT(*)', 'cnt')
-        .where('app.announcement_id IN (:...ids)', { ids: announcementIds })
-        .groupBy('app.announcement_id')
-        .getRawMany();
-
-    const totalCountMap = new Map<string, number>(
-      totalCountRows.map((r) => [r.announcement_id, Number(r.cnt)]),
-    );
-
-    // Step 5: build enriched announcement objects in page order
-    const announcements = announcementIds
+    // Step 4: build announcement objects in page order, keeping user's applications per announcement
+    const entries = announcementIds
       .map((id) => announcementsMap.get(id)!)
-      .filter((entry) => entry.announcement !== null)
-      .map(({ announcement, myApplications }) => ({
-        ...announcement,
-        my_applications: myApplications,
+      .filter((entry) => entry.announcement !== null);
+
+    const announcements = entries.map(({ announcement }) => announcement);
+
+    // Step 5: run all enrichments in parallel
+    await Promise.all([
+      this.enrichAnnouncementsWithSignedUrls(announcements),      // signed URLs + batch regions/villages
+      this.attachUserFlags(announcements, userId),                 // isFavorite + isApplied
+      this.attachOwnerPendingApprovedCounts(announcements),        // pending/approved counts
+    ]);
+
+    const announcementsPayload = entries.map(({ announcement, myApplications }) => {
+      const { applications: _r1, images: _r2, ...rest } = announcement as any;
+      return {
+        ...rest,
         my_applications_count: myApplications.length,
-        applications_count: totalCountMap.get((announcement as any).id) ?? 0,
-      }));
+        pending_application_count: (announcement as any).pending_application_count ?? 0,
+        approved_application_count: (announcement as any).approved_application_count ?? 0,
+      };
+    });
 
-    // Step 6: enrich with signed URLs, regions/villages, and user flags
-    const enriched = await this.enrichAnnouncementsWithSignedUrls(announcements);
-    const withRegions = await Promise.all(enriched.map((ann) => this.resolveRegionsAndVillages(ann)));
-    const withFlags = await this.attachUserFlags(withRegions, userId);
-
-    return { announcements: withFlags, total, page, limit };
+    return { announcements: announcementsPayload, total, page, limit };
   }
 
   /**

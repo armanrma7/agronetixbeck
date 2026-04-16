@@ -328,10 +328,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized (not authenticated)' })
   @ApiResponse({ status: 403, description: 'Forbidden (not owner or admin)' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async updateUser(
-    @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
+  async updateUser(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.authService.updateUser(id, updateUserDto);
   }
 
@@ -343,11 +340,7 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
   @ApiResponse({ status: 400, description: 'Current password incorrect or same as new password' })
   @ApiResponse({ status: 401, description: 'Not authenticated' })
-  async changePassword(
-    @Body() dto: ChangePasswordDto,
-    @Request() req,
-  ) {
+  async changePassword(@Body() dto: ChangePasswordDto, @Request() req) {
     return this.authService.changePassword(req.user.id, dto.current_password, dto.new_password);
   }
 }
-

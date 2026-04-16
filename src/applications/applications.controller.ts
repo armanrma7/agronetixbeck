@@ -12,7 +12,14 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -35,10 +42,7 @@ export class ApplicationsController {
   })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 403, description: 'User cannot apply' })
-  async create(
-    @Body() createDto: CreateApplicationDto,
-    @Request() req,
-  ) {
+  async create(@Body() createDto: CreateApplicationDto, @Request() req) {
     return this.applicationsService.create(createDto.announcement_id, createDto, req.user.id);
   }
 
