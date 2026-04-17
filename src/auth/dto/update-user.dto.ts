@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsUUID,
   MinLength,
+  MaxLength,
   IsEmail,
   IsPhoneNumber,
 } from 'class-validator';
@@ -69,5 +70,25 @@ export class UpdateUserDto {
   @IsOptional()
   @IsUUID()
   village_id?: string;
+
+  @ApiProperty({
+    description: 'Company registration number (only applicable for company accounts)',
+    example: '12345678',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  company_number?: string;
+
+  @ApiProperty({
+    description: 'Preferred bot language',
+    example: 'en',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  language?: string;
 }
 

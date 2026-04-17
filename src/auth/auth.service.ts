@@ -45,6 +45,20 @@ export class AuthService {
   }
 
   /**
+   * Convert stored profile_picture path to a signed URL.
+   * If the value is already an external URL or null, it is returned as-is.
+   */
+  private async resolveProfilePicture(user: Partial<User>): Promise<void> {
+    if (
+      user.profile_picture &&
+      !user.profile_picture.startsWith('http://') &&
+      !user.profile_picture.startsWith('https://')
+    ) {
+      user.profile_picture = await this.storageService.getSignedUrl(user.profile_picture) ?? user.profile_picture;
+    }
+  }
+
+  /**
    * Hash password using bcrypt
    */
   private async hashPassword(password: string): Promise<string> {
@@ -124,10 +138,15 @@ export class AuthService {
     const {
       phone, full_name, password, user_type, phones, emails,
       profile_picture, region_id, village_id, terms_accepted = true,
+      company_number, language = 'en',
     } = registerDto;
 
     if (terms_accepted === false) {
       throw new BadRequestException('Terms not accepted');
+    }
+
+    if (user_type === UserType.COMPANY && !company_number) {
+      throw new BadRequestException('company_number is required for company accounts');
     }
 
     const { validRegionId, validVillageId } = await this.validateRegionAndVillage(region_id, village_id);
@@ -152,6 +171,8 @@ export class AuthService {
       existing.region_id     = validRegionId  ?? existing.region_id;
       existing.village_id    = validVillageId ?? existing.village_id;
       existing.account_status = user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE;
+      existing.company_number = company_number ?? existing.company_number;
+      existing.language   = language ?? existing.language ?? 'en';
       existing.verified      = false;
       savedUser = await this.userRepository.save(existing);
     } else {
@@ -173,6 +194,8 @@ export class AuthService {
           region_id: validRegionId, village_id: validVillageId,
           account_status: user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE,
           terms_accepted: terms_accepted ?? true,
+          company_number: company_number ?? null,
+          language: language ?? 'en',
           verified: false,
           is_locked: false,
         }),
@@ -192,6 +215,7 @@ export class AuthService {
       relations: ['region', 'village'],
     });
     const { password: _, ...userWithoutPassword } = userWithRelations ?? savedUser;
+    await this.resolveProfilePicture(userWithoutPassword);
 
     const message = existing
       ? 'User updated. OTP sent via SMS — please verify.'
@@ -281,6 +305,7 @@ export class AuthService {
 
     // Remove password and refresh_token from response
     const { password: _, refresh_token: __, ...userWithoutSecrets } = userWithRelations || user;
+    await this.resolveProfilePicture(userWithoutSecrets);
 
     // Determine message based on user type and verification status
     let message = 'OTP verified successfully';
@@ -388,6 +413,12 @@ export class AuthService {
     if (validVillageId !== null) {
       user.village_id = validVillageId;
     }
+    if (updateUserDto.company_number !== undefined) {
+      user.company_number = updateUserDto.company_number;
+    }
+    if (updateUserDto.language !== undefined) {
+      user.language = updateUserDto.language;
+    }
 
     const updatedUser = await this.userRepository.save(user);
 
@@ -403,6 +434,7 @@ export class AuthService {
       refresh_token: __,
       ...userWithoutSecrets
     } = userWithRelations || updatedUser;
+    await this.resolveProfilePicture(userWithoutSecrets);
 
     return {
       message: 'User updated successfully',
@@ -489,6 +521,7 @@ export class AuthService {
 
       // Remove password and refresh_token from response
       const { password: _, refresh_token: __, ...userWithoutSecrets } = userWithRelations || user;
+      await this.resolveProfilePicture(userWithoutSecrets);
 
       return {
         message: 'Login successful',
@@ -551,6 +584,7 @@ export class AuthService {
     }
 
     const { password: _, refresh_token: __, ...userWithoutSecrets } = user;
+    await this.resolveProfilePicture(userWithoutSecrets);
 
     return {
       message: 'User profile',
@@ -680,6 +714,92 @@ export class AuthService {
       }
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  /**
+   * Update profile picture for authenticated user
+   * - Uploads new image to Supabase Storage under 'profiles' folder
+   * - Deletes old image from storage if it was a stored path
+   */
+  async updateProfilePicture(
+    userId: string,
+    file: any, // Express.Multer.File
+  ): Promise<{ message: string; profile_picture: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Upload new image
+    const newPath = await this.storageService.uploadImage(file, 'profiles');
+
+    // Delete old image from storage if it's a stored path (not external URL)
+    if (
+      user.profile_picture &&
+      !user.profile_picture.startsWith('http://') &&
+      !user.profile_picture.startsWith('https://')
+    ) {
+      try {
+        await this.storageService.deleteImage(user.profile_picture);
+      } catch (err) {
+        this.logger.warn(`Failed to delete old profile picture: ${(err as Error).message}`);
+      }
+    }
+
+    user.profile_picture = newPath;
+    await this.userRepository.save(user);
+
+    const signedUrl = await this.storageService.getSignedUrl(newPath);
+    return {
+      message: 'Profile picture updated successfully',
+      profile_picture: signedUrl ?? newPath, // signed URL for immediate use
+    };
+  }
+
+  /**
+   * Delete profile picture for authenticated user
+   * - Removes image from Supabase Storage
+   * - Clears profile_picture field on user
+   */
+  async deleteProfilePicture(userId: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.profile_picture) {
+      throw new BadRequestException('No profile picture to delete');
+    }
+
+    // Delete from storage if it's a stored path (not external URL)
+    if (
+      !user.profile_picture.startsWith('http://') &&
+      !user.profile_picture.startsWith('https://')
+    ) {
+      try {
+        await this.storageService.deleteImage(user.profile_picture);
+      } catch (err) {
+        this.logger.warn(`Failed to delete profile picture from storage: ${(err as Error).message}`);
+      }
+    }
+
+    user.profile_picture = null;
+    await this.userRepository.save(user);
+
+    return { message: 'Profile picture deleted successfully' };
+  }
+
+  /**
+   * Change bot language for authenticated user
+   */
+  async changeLanguage(userId: string, botLanguage: string): Promise<{ message: string; language: string }> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    user.language = botLanguage;
+    await this.userRepository.save(user);
+    return { message: 'Language updated successfully', language: botLanguage };
   }
 
   /**

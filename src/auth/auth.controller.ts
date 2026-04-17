@@ -3,14 +3,20 @@ import {
   Get,
   Post,
   Put,
+  Patch,
+  Delete,
   Body,
   Param,
   HttpCode,
   HttpStatus,
   UseGuards,
   Request,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { SendOtpDto } from './dto/send-otp.dto';
@@ -21,6 +27,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ChangeLanguageDto } from './dto/change-language.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserOwnerOrAdminGuard } from './guards/user-owner-or-admin.guard';
 import { ActiveAccountGuard } from './guards/active-account.guard';
@@ -342,5 +349,69 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Not authenticated' })
   async changePassword(@Body() dto: ChangePasswordDto, @Request() req) {
     return this.authService.changePassword(req.user.id, dto.current_password, dto.new_password);
+  }
+
+  @Patch('users/:id/profile-picture')
+  @UseGuards(JwtAuthGuard, UserOwnerOrAdminGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiConsumes('multipart/form-data')
+  @ApiParam({ name: 'id', description: 'User UUID', type: 'string' })
+  @ApiOperation({ summary: 'Update profile picture' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary', description: 'Image file (jpeg/png/webp, max 5MB)' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile picture updated',
+    schema: { example: { message: 'Profile picture updated successfully', profile_picture: 'https://...' } },
+  })
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 6 * 1024 * 1024 } }))
+  async updateProfilePicture(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Request() req,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+    return this.authService.updateProfilePicture(id, file);
+  }
+
+  @Delete('users/:id/profile-picture')
+  @UseGuards(JwtAuthGuard, UserOwnerOrAdminGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiParam({ name: 'id', description: 'User UUID', type: 'string' })
+  @ApiOperation({ summary: 'Delete profile picture' })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile picture deleted',
+    schema: { example: { message: 'Profile picture deleted successfully' } },
+  })
+  @ApiResponse({ status: 400, description: 'No profile picture to delete' })
+  async deleteProfilePicture(@Param('id') id: string) {
+    return this.authService.deleteProfilePicture(id);
+  }
+
+  @Patch('language')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change bot language for authenticated user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Language updated successfully',
+    schema: { example: { message: 'Language updated successfully', language: 'ru' } },
+  })
+  @ApiResponse({ status: 401, description: 'Not authenticated' })
+  async changeLanguage(@Body() dto: ChangeLanguageDto, @Request() req) {
+    return this.authService.changeLanguage(req.user.id, dto.language);
   }
 }

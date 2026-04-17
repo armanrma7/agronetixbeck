@@ -7,6 +7,7 @@ import {
   IsArray,
   IsBoolean,
   MinLength,
+  MaxLength,
   IsOptional,
   ArrayMinSize,
   IsUUID,
@@ -96,6 +97,27 @@ export class RegisterDto {
   @IsOptional()
   @IsUUID()
   village_id?: string;
+
+  @ApiProperty({
+    description: 'Company registration number (required when user_type is company)',
+    example: '12345678',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  company_number?: string;
+
+  @ApiProperty({
+    description: 'Preferred bot language (defaults to en)',
+    example: 'en',
+    required: false,
+    default: 'en',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(10)
+  language?: string;
 
   @ApiProperty({
     description: 'Terms and conditions acceptance (defaults to true if not provided)',

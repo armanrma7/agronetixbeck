@@ -82,6 +82,12 @@ export class User {
   @Column({ type: 'boolean', default: false })
   is_locked: boolean; // Account lock flag
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  company_number: string; // Required for company accounts
+
+  @Column({ type: 'varchar', length: 10, default: 'en' })
+  language: string; // Default language for bot interactions
+
   @Column({ type: 'boolean', default: false })
   terms_accepted: boolean; // Terms and conditions acceptance
 
