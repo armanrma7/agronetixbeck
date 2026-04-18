@@ -244,17 +244,17 @@ export class ApplicationsService {
       throw new BadRequestException('You already have a pending application for this announcement');
     }
 
-    // Validate count for goods category
-    if (announcement.category === AnnouncementCategory.GOODS) {
+    // Validate count for goods and rent categories
+    if (announcement.category === AnnouncementCategory.GOODS || announcement.category === AnnouncementCategory.RENT) {
       if (!createDto.count || createDto.count <= 0) {
         throw new BadRequestException(
-          'Count is required and must be greater than 0 for goods announcements',
+          'Count is required and must be greater than 0 for goods and rent announcements',
         );
       }
     } else {
-      // For non-goods announcements, count should be null
+      // For service announcements, count must not be provided
       if (createDto.count !== undefined && createDto.count !== null) {
-        throw new BadRequestException('Count is only applicable for goods announcements');
+        throw new BadRequestException('Count is only applicable for goods and rent announcements');
       }
     }
 
@@ -269,7 +269,7 @@ export class ApplicationsService {
     const application = this.applicationRepository.create({
       announcement,
       applicant_id: applicantId,
-      count: announcement.category === AnnouncementCategory.GOODS ? createDto.count : null,
+      count: (announcement.category === AnnouncementCategory.GOODS || announcement.category === AnnouncementCategory.RENT) ? createDto.count : null,
       delivery_dates: deliveryDates,
       notes: createDto.notes || null,
       status: ApplicationStatus.PENDING,
@@ -403,7 +403,7 @@ export class ApplicationsService {
     }
 
     if (updateDto.count !== undefined) {
-      if (announcement.category === AnnouncementCategory.GOODS) {
+      if (announcement.category === AnnouncementCategory.GOODS || announcement.category === AnnouncementCategory.RENT) {
         application.count = Number(updateDto.count);
       } else {
         application.count = null;

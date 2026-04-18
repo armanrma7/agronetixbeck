@@ -11,7 +11,7 @@ export class CreateApplicationDto {
   announcement_id: string;
 
   @ApiProperty({
-    description: 'Count/quantity (required if announcement category is goods). Use "count" not "quantity".',
+    description: 'Count/quantity (required if announcement category is goods or rent). Use "count" not "quantity".',
     minimum: 1,
     example: 50,
   })
