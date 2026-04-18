@@ -286,10 +286,12 @@ export class AuthService {
     const tokens = await this.jwtService.generateTokens(user);
 
     // Save refresh token to database
-    user.refresh_token = tokens.refresh_token;
-    user.last_login_at = new Date();
-    user.last_active_at = new Date();
-    await this.userRepository.save(user);
+    const now = new Date();
+    await this.userRepository.update(user.id, {
+      refresh_token: tokens.refresh_token,
+      last_login_at: now,
+      last_active_at: now,
+    });
 
     // Try to load relations for response (optional, won't fail if relations don't exist)
     let userWithRelations: User | null = null;
@@ -420,11 +422,20 @@ export class AuthService {
       user.language = updateUserDto.language;
     }
 
-    const updatedUser = await this.userRepository.save(user);
+    const patch: Partial<typeof user> = {};
+    if (updateUserDto.full_name !== undefined) patch.full_name = user.full_name;
+    if (updateUserDto.phones !== undefined) patch.phones = user.phones;
+    if (updateUserDto.emails !== undefined) patch.emails = user.emails;
+    if (updateUserDto.profile_picture !== undefined) patch.profile_picture = user.profile_picture;
+    if (validRegionId !== null) patch.region_id = user.region_id;
+    if (validVillageId !== null) patch.village_id = user.village_id;
+    if (updateUserDto.company_number !== undefined) patch.company_number = user.company_number;
+    if (updateUserDto.language !== undefined) patch.language = user.language;
+    await this.userRepository.update(userId, patch);
 
     // Load relations for response
     const userWithRelations = await this.userRepository.findOne({
-      where: { id: updatedUser.id },
+      where: { id: userId },
       relations: ['region', 'village'],
     });
 
@@ -729,9 +740,6 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.user_type !== UserType.COMPANY) {
-      throw new BadRequestException('Only company accounts can have a profile picture');
-    }
 
     // Upload new image
     const newPath = await this.storageService.uploadImage(file, 'profiles');
@@ -749,8 +757,7 @@ export class AuthService {
       }
     }
 
-    user.profile_picture = newPath;
-    await this.userRepository.save(user);
+    await this.userRepository.update(userId, { profile_picture: newPath });
 
     const signedUrl = await this.storageService.getSignedUrl(newPath);
     return {
@@ -769,9 +776,6 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    if (user.user_type !== UserType.COMPANY) {
-      throw new BadRequestException('Only company accounts can have a profile picture');
-    }
 
     if (!user.profile_picture) {
       throw new BadRequestException('No profile picture to delete');
@@ -789,8 +793,7 @@ export class AuthService {
       }
     }
 
-    user.profile_picture = null;
-    await this.userRepository.save(user);
+    await this.userRepository.update(userId, { profile_picture: null });
 
     return { message: 'Profile picture deleted successfully' };
   }
