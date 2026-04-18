@@ -503,9 +503,9 @@ export class AnnouncementsService {
    * Validate category-specific required fields
    */
   private validateCategoryFields(dto: CreateAnnouncementDto): void {
-    if (dto.category === AnnouncementCategory.GOODS) {
+    if (dto.category === AnnouncementCategory.GOODS || dto.category === AnnouncementCategory.RENT) {
       if (!dto.count || dto.count <= 0) {
-        throw new BadRequestException('count is required and must be > 0 for goods category');
+        throw new BadRequestException('count is required and must be > 0 for goods and rent categories');
       }
       // daily_limit is optional, but if provided, must be valid
       if (dto.daily_limit && dto.daily_limit > dto.count) {
@@ -546,7 +546,7 @@ export class AnnouncementsService {
     }
 
     // Add count for goods
-    if (announcement.category === AnnouncementCategory.GOODS && announcement.count) {
+    if ((announcement.category === AnnouncementCategory.GOODS || announcement.category === AnnouncementCategory.RENT) && announcement.count) {
       parts.push(`${announcement.count} ${announcement.unit || 'units'}`);
     }
 
@@ -1326,7 +1326,7 @@ export class AnnouncementsService {
     }
 
     // Validate daily_limit vs count if updating goods
-    if (updateDto.daily_limit && announcement.category === AnnouncementCategory.GOODS) {
+    if (updateDto.daily_limit && (announcement.category === AnnouncementCategory.GOODS || announcement.category === AnnouncementCategory.RENT)) {
       const newCount = updateDto.count || announcement.count;
       if (updateDto.daily_limit > newCount) {
         throw new BadRequestException('daily_limit cannot exceed count');

@@ -57,17 +57,17 @@ export class CreateAnnouncementDto {
   // CONDITIONAL FIELDS (category-specific)
   // ====================================
 
-  // For category = 'goods': count is required
-  @ApiProperty({ 
+  // For category = 'goods' or 'rent': count is required
+  @ApiProperty({
     required: false,
-    description: 'Required for goods category',
-    minimum: 0.01, 
-    maximum: 999999, 
-    example: 1000 
+    description: 'Required for goods and rent categories',
+    minimum: 0.01,
+    maximum: 999999,
+    example: 1000
   })
-  @ValidateIf((o) => o.category === AnnouncementCategory.GOODS)
+  @ValidateIf((o) => o.category === AnnouncementCategory.GOODS || o.category === AnnouncementCategory.RENT)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0.01, { message: 'Count must be > 0 for goods.' })
+  @Min(0.01, { message: 'Count must be > 0 for goods and rent.' })
   @Max(999999)
   count?: number;
 
