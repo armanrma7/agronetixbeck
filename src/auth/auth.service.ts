@@ -138,7 +138,7 @@ export class AuthService {
     const {
       phone, full_name, password, user_type, phones, emails,
       profile_picture, region_id, village_id, terms_accepted = true,
-      company_number, language = 'en',
+      company_number, language = 'hy',
     } = registerDto;
 
     if (terms_accepted === false) {
@@ -172,7 +172,7 @@ export class AuthService {
       existing.village_id    = validVillageId ?? existing.village_id;
       existing.account_status = user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE;
       existing.company_number = company_number ?? existing.company_number;
-      existing.language   = language ?? existing.language ?? 'en';
+      existing.language   = language ?? existing.language ?? 'hy';
       existing.verified      = false;
       savedUser = await this.userRepository.save(existing);
     } else {
@@ -195,7 +195,7 @@ export class AuthService {
           account_status: user_type === UserType.COMPANY ? AccountStatus.PENDING : AccountStatus.ACTIVE,
           terms_accepted: terms_accepted ?? true,
           company_number: company_number ?? null,
-          language: language ?? 'en',
+          language: language ?? 'hy',
           verified: false,
           is_locked: false,
         }),
@@ -729,6 +729,9 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
+    if (user.user_type !== UserType.COMPANY) {
+      throw new BadRequestException('Only company accounts can have a profile picture');
+    }
 
     // Upload new image
     const newPath = await this.storageService.uploadImage(file, 'profiles');
@@ -765,6 +768,9 @@ export class AuthService {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    if (user.user_type !== UserType.COMPANY) {
+      throw new BadRequestException('Only company accounts can have a profile picture');
     }
 
     if (!user.profile_picture) {

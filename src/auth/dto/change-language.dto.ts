@@ -4,7 +4,7 @@ import { IsString, MaxLength } from 'class-validator';
 export class ChangeLanguageDto {
   @ApiProperty({
     description: 'Bot language code',
-    example: 'ru',
+    example: 'hy',
   })
   @IsString()
   @MaxLength(10)

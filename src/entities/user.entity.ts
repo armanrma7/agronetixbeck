@@ -85,7 +85,7 @@ export class User {
   @Column({ type: 'varchar', length: 100, nullable: true })
   company_number: string; // Required for company accounts
 
-  @Column({ type: 'varchar', length: 10, default: 'en' })
+  @Column({ type: 'varchar', length: 10, default: 'hy' })
   language: string; // Default language for bot interactions
 
   @Column({ type: 'boolean', default: false })

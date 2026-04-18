@@ -110,9 +110,9 @@ export class RegisterDto {
 
   @ApiProperty({
     description: 'Preferred bot language (defaults to en)',
-    example: 'en',
+    example: 'hy',
     required: false,
-    default: 'en',
+    default: 'hy',
   })
   @IsOptional()
   @IsString()

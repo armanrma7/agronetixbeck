@@ -259,7 +259,7 @@ export class ApplicationsService {
 
     // Create application
     const application = this.applicationRepository.create({
-      announcement_id: announcementId,
+      announcement,
       applicant_id: applicantId,
       count: announcement.category === AnnouncementCategory.GOODS ? createDto.count : null,
       delivery_dates: deliveryDates,
