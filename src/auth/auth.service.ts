@@ -444,7 +444,7 @@ export class AuthService {
       password: _,
       refresh_token: __,
       ...userWithoutSecrets
-    } = userWithRelations || updatedUser;
+    } = userWithRelations || user;
     await this.resolveProfilePicture(userWithoutSecrets);
 
     return {
