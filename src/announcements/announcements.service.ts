@@ -1448,7 +1448,7 @@ export class AnnouncementsService {
     }
 
     announcement.status = AnnouncementStatus.PUBLISHED;
-    await this.announcementRepository.save(announcement);
+    await this.announcementRepository.update(id, { status: AnnouncementStatus.PUBLISHED });
 
     // Notify owner (creates DB record + push notification)
     try {
@@ -1576,7 +1576,7 @@ export class AnnouncementsService {
 
     announcement.status = AnnouncementStatus.BLOCKED;
     announcement.closed_by = adminId;
-    await this.announcementRepository.save(announcement);
+    await this.announcementRepository.update(id, { status: AnnouncementStatus.BLOCKED, closed_by: adminId });
 
     // Cancel all PENDING and APPROVED applications for the blocked announcement
     await this.applicationRepository
@@ -1620,7 +1620,7 @@ export class AnnouncementsService {
 
     announcement.status = AnnouncementStatus.CLOSED;
     announcement.closed_by = closedBy;
-    await this.announcementRepository.save(announcement);
+    await this.announcementRepository.update(id, { status: AnnouncementStatus.CLOSED, closed_by: closedBy });
 
     // Return enriched announcement
     return this.findOne(id);
@@ -1647,7 +1647,7 @@ export class AnnouncementsService {
     }
 
     announcement.status = AnnouncementStatus.CANCELED;
-    await this.announcementRepository.save(announcement);
+    await this.announcementRepository.update(id, { status: AnnouncementStatus.CANCELED });
 
     // Delete images from storage when announcement is canceled
     if (announcement.images && announcement.images.length > 0) {
@@ -1688,7 +1688,7 @@ export class AnnouncementsService {
 
     // Soft delete
     announcement.status = AnnouncementStatus.CANCELED;
-    await this.announcementRepository.save(announcement);
+    await this.announcementRepository.update(id, { status: AnnouncementStatus.CANCELED });
 
     // Delete images from storage when announcement is deleted
     if (announcement.images && announcement.images.length > 0) {
@@ -1796,7 +1796,7 @@ export class AnnouncementsService {
       if (announcement.date_to && new Date(announcement.date_to) < today) {
         announcement.status = AnnouncementStatus.CLOSED;
         announcement.closed_by = null; // System closed
-        await this.announcementRepository.save(announcement);
+        await this.announcementRepository.update(announcement.id, { status: AnnouncementStatus.CLOSED, closed_by: null });
 
         // Notify owner (centralized messages)
         await this.sendNotificationToUser(
@@ -1834,7 +1834,7 @@ export class AnnouncementsService {
     for (const announcement of expiredAnnouncements) {
       announcement.status = AnnouncementStatus.CLOSED;
       announcement.closed_by = null; // System closed
-      await this.announcementRepository.save(announcement);
+      await this.announcementRepository.update(announcement.id, { status: AnnouncementStatus.CLOSED, closed_by: null });
 
       // Notify owner (centralized messages)
       await this.sendNotificationToUser(

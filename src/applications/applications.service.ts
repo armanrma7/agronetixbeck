@@ -7,9 +7,13 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Application, ApplicationStatus } from '../entities/application.entity';
-import { Announcement, AnnouncementStatus, AnnouncementCategory } from '../entities/announcement.entity';
+import {
+  Announcement,
+  AnnouncementStatus,
+  AnnouncementCategory,
+} from '../entities/announcement.entity';
 import { User, UserType } from '../entities/user.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { UpdateApplicationDto } from './dto/update-application.dto';
@@ -55,7 +59,9 @@ export class ApplicationsService {
    * Parse YYYY-MM-DD as a calendar date in local time (avoids UTC vs local bugs from `new Date(isoDate)`).
    */
   private parseDeliveryDateOnly(dateStr: string): Date {
-    const m = String(dateStr).trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    const m = String(dateStr)
+      .trim()
+      .match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (!m) {
       throw new BadRequestException(
         `Invalid delivery date "${dateStr}". Use YYYY-MM-DD (e.g. 2026-03-01).`,
@@ -241,7 +247,9 @@ export class ApplicationsService {
     // Validate count for goods category
     if (announcement.category === AnnouncementCategory.GOODS) {
       if (!createDto.count || createDto.count <= 0) {
-        throw new BadRequestException('Count is required and must be greater than 0 for goods announcements');
+        throw new BadRequestException(
+          'Count is required and must be greater than 0 for goods announcements',
+        );
       }
     } else {
       // For non-goods announcements, count should be null
@@ -299,7 +307,13 @@ export class ApplicationsService {
   async findOne(id: string, userId?: string, userType?: string): Promise<Application> {
     const application = await this.applicationRepository.findOne({
       where: { id },
-      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
+      relations: [
+        'applicant',
+        'applicant.region',
+        'applicant.village',
+        'announcement',
+        'announcement.owner',
+      ],
       select: {
         id: true,
         announcement_id: true,
@@ -368,7 +382,9 @@ export class ApplicationsService {
 
     const isAdmin = userType === UserType.ADMIN;
     if (!isAdmin && announcement.owner_id !== userId && application.applicant_id !== userId) {
-      throw new ForbiddenException('Only the announcement owner or the application owner (applicant) can edit this application');
+      throw new ForbiddenException(
+        'Only the announcement owner or the application owner (applicant) can edit this application',
+      );
     }
 
     if (application.status !== ApplicationStatus.PENDING) {
@@ -430,7 +446,9 @@ export class ApplicationsService {
     const skip = (pageNum - 1) * limitNum;
 
     const applicantSelect = {
-      id: true, full_name: true, phone: true,
+      id: true,
+      full_name: true,
+      phone: true,
       profile_picture: true, user_type: true,
       region: { id: true, name_en: true, name_am: true, name_ru: true },
       village: { id: true, name_en: true, name_am: true, name_ru: true },
@@ -442,9 +460,15 @@ export class ApplicationsService {
         where: { announcement_id: announcementId },
         relations: ['applicant', 'applicant.region', 'applicant.village'],
         select: {
-          id: true, announcement_id: true, applicant_id: true,
-          count: true, delivery_dates: true, notes: true,
-          status: true, created_at: true, updated_at: true,
+          id: true,
+          announcement_id: true,
+          applicant_id: true,
+          count: true,
+          delivery_dates: true,
+          notes: true,
+          status: true,
+          created_at: true,
+          updated_at: true,
           applicant: applicantSelect,
         },
         order: { created_at: 'DESC' },
@@ -463,9 +487,15 @@ export class ApplicationsService {
       },
       relations: ['applicant', 'applicant.region', 'applicant.village'],
       select: {
-        id: true, announcement_id: true, applicant_id: true,
-        count: true, delivery_dates: true, notes: true,
-        status: true, created_at: true, updated_at: true,
+        id: true,
+        announcement_id: true,
+        applicant_id: true,
+        count: true,
+        delivery_dates: true,
+        notes: true,
+        status: true,
+        created_at: true,
+        updated_at: true,
         applicant: applicantSelect,
       },
       order: { created_at: 'DESC' },
@@ -504,7 +534,13 @@ export class ApplicationsService {
     };
 
     const [applications, total] = await this.applicationRepository.findAndCount({
-      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
+      relations: [
+        'applicant',
+        'applicant.region',
+        'applicant.village',
+        'announcement',
+        'announcement.owner',
+      ],
       select: {
         id: true,
         announcement_id: true,
@@ -559,7 +595,9 @@ export class ApplicationsService {
     const skip = (pageNum - 1) * limitNum;
 
     const safeUserSelect = {
-      id: true, full_name: true, phone: true,
+      id: true,
+      full_name: true,
+      phone: true,
       profile_picture: true, user_type: true,
       region: { id: true, name_en: true, name_am: true, name_ru: true },
       village: { id: true, name_en: true, name_am: true, name_ru: true },
@@ -567,9 +605,17 @@ export class ApplicationsService {
 
     const [applications, total] = await this.applicationRepository.findAndCount({
       where: { applicant_id: userId },
-      relations: ['applicant', 'applicant.region', 'applicant.village', 'announcement', 'announcement.owner'],
+      relations: [
+        'applicant',
+        'applicant.region',
+        'applicant.village',
+        'announcement',
+        'announcement.owner',
+      ],
       select: {
-        id: true, announcement_id: true, applicant_id: true,
+        id: true,
+        announcement_id: true,
+        applicant_id: true,
         count: true, delivery_dates: true, notes: true,
         status: true, created_at: true, updated_at: true,
         applicant: safeUserSelect,
@@ -639,7 +685,10 @@ export class ApplicationsService {
         where: { id: announcementId },
         relations: ['item'],
       });
-      const itemName = announcementWithItem?.item?.name_en || announcementWithItem?.item?.name_am || 'announcement';
+      const itemName =
+        announcementWithItem?.item?.name_en ||
+        announcementWithItem?.item?.name_am ||
+        'announcement';
       await this.notificationService.create({
         user_id: application.applicant_id,
         type: NotificationType.APPLICATION_APPROVED,
