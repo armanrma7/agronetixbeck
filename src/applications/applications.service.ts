@@ -630,8 +630,8 @@ export class ApplicationsService {
     this.validateStatusTransition(application.status, ApplicationStatus.APPROVED);
 
     // Update application status
+    await this.applicationRepository.update(applicationId, { status: ApplicationStatus.APPROVED });
     application.status = ApplicationStatus.APPROVED;
-    const updated = await this.applicationRepository.save(application);
 
     // Notify only the applicant (owner of the application; no one else)
     try {
@@ -694,8 +694,8 @@ export class ApplicationsService {
     this.validateStatusTransition(application.status, ApplicationStatus.REJECTED);
 
     // Update application status
+    await this.applicationRepository.update(applicationId, { status: ApplicationStatus.REJECTED });
     application.status = ApplicationStatus.REJECTED;
-    await this.applicationRepository.save(application);
 
     // Notify only the applicant (owner of the application; no one else)
     try {
@@ -759,8 +759,8 @@ export class ApplicationsService {
     this.validateStatusTransition(application.status, newStatus);
 
     // Update application status
+    await this.applicationRepository.update(applicationId, { status: newStatus });
     application.status = newStatus;
-    const updated = await this.applicationRepository.save(application);
 
     // When closed via updateStatus, notify only the applicant (application owner)
     if (newStatus === ApplicationStatus.CLOSED) {
@@ -835,7 +835,7 @@ export class ApplicationsService {
         );
       }
       application.status = ApplicationStatus.CLOSED;
-      await this.applicationRepository.save(application);
+      await this.applicationRepository.update(applicationId, { status: ApplicationStatus.CLOSED });
       this.logger.log(`Application ${applicationId} closed by applicant`);
       return this.findOne(applicationId);
     }
@@ -861,7 +861,7 @@ export class ApplicationsService {
     }
     this.validateStatusTransition(application.status, ApplicationStatus.CANCELED);
     application.status = ApplicationStatus.CANCELED;
-    const updated = await this.applicationRepository.save(application);
+    await this.applicationRepository.update(applicationId, { status: ApplicationStatus.CANCELED });
 
     try {
       const itemName =
