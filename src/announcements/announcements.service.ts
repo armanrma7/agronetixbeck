@@ -982,9 +982,13 @@ export class AnnouncementsService {
     // Enrich with signed URLs and resolve regions/villages
     const withUrls = await this.enrichWithSignedUrls(announcement);
     const withRegions = await this.resolveRegionsAndVillages(withUrls);
-    
-    // Resolve applications count and data (only current user's applications)
-    const withApplications = await this.resolveApplications(withRegions, currentUserId);
+
+    // Run all per-announcement enrichment in parallel
+    const [withApplications] = await Promise.all([
+      this.resolveApplications(withRegions, currentUserId),   // current user's own applications
+      this.resolveApplicationsForAnnouncements([withRegions]), // total applications_count
+      this.attachOwnerPendingApprovedCounts([withRegions]),    // pending/approved counts
+    ]);
 
     // Attach isFavorite and isApplied
     const [enriched] = await this.attachUserFlags([withApplications], currentUserId);
@@ -1474,7 +1478,7 @@ export class AnnouncementsService {
     await this.notifyUsersInRegions(announcement);
 
     // Return enriched announcement
-    return this.findOne(id);
+    return this.findOne(id, adminId);
   }
 
   /**
@@ -1623,7 +1627,7 @@ export class AnnouncementsService {
     await this.announcementRepository.update(id, { status: AnnouncementStatus.CLOSED, closed_by: closedBy });
 
     // Return enriched announcement
-    return this.findOne(id);
+    return this.findOne(id, closedBy);
   }
 
   /**
@@ -1667,7 +1671,7 @@ export class AnnouncementsService {
     }
 
     // Return enriched announcement
-    return this.findOne(id);
+    return this.findOne(id, userId);
   }
 
   /**
