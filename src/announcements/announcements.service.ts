@@ -166,7 +166,7 @@ export class AnnouncementsService {
    */
   private async resolveApplications(announcement: Announcement, currentUserId?: string): Promise<Announcement> {
     if (!currentUserId) {
-      (announcement as any).applications_count = 0;
+      (announcement as any).my_applications_count = 0;
       (announcement as any).applications = [];
       return announcement;
     }
@@ -194,7 +194,7 @@ export class AnnouncementsService {
       withDeleted: false,
     });
 
-    (announcement as any).applications_count = applications.length;
+    (announcement as any).my_applications_count = applications.length;
     (announcement as any).applications = applications;
 
     return announcement;
@@ -983,16 +983,15 @@ export class AnnouncementsService {
     const withUrls = await this.enrichWithSignedUrls(announcement);
     const withRegions = await this.resolveRegionsAndVillages(withUrls);
 
-    // Run all per-announcement enrichment in parallel
-    const [withApplications] = await Promise.all([
-      this.resolveApplications(withRegions, currentUserId),   // current user's own applications
-      this.resolveApplicationsForAnnouncements([withRegions]), // total applications_count
-      this.attachOwnerPendingApprovedCounts([withRegions]),    // pending/approved counts
+    // Run independent enrichments in parallel (each writes distinct fields — no conflicts)
+    await Promise.all([
+      this.resolveApplications(withRegions, currentUserId),    // my_applications_count + applications[]
+      this.resolveApplicationsForAnnouncements([withRegions]), // applications_count (total)
+      this.attachOwnerPendingApprovedCounts([withRegions]),    // pending_application_count, approved_application_count
+      this.attachUserFlags([withRegions], currentUserId),      // isFavorite, isApplied
     ]);
 
-    // Attach isFavorite and isApplied
-    const [enriched] = await this.attachUserFlags([withApplications], currentUserId);
-    return enriched;
+    return withRegions;
   }
 
   /**
